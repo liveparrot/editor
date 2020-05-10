@@ -3,7 +3,6 @@ import MarkdownIt from 'markdown-it';
 import Token from 'markdown-it/lib/token';
 import VanillaCaret from 'vanilla-caret-js';
 
-import TurndownService from 'turndown';
 import marked, { MarkedOptions,  } from 'marked';
 import DOMPurify from 'dompurify';
 
@@ -46,15 +45,6 @@ const escapes: [RegExp, string][] = [
   // [/^(\d+)\. /g, '$1\\. ']
   [/&nbsp;/g, ' ']
 ]
-
-TurndownService.prototype.escape = function (string) {
-  return escapes.reduce(function (accumulator, escape) {
-    return accumulator.replace(escape[0], escape[1]);
-  }, string)
-}
-const turndown = new TurndownService();
-const toKeep: any[] = ['&nbsp;'];
-turndown.keep(toKeep);
 
 const md = new MarkdownIt()
   .enable(['strikethrough']);
@@ -727,6 +717,14 @@ class Markdown {
 
     div.addEventListener('keydown', this.onTheRightKeyDown);
     div.addEventListener('keyup', this.onKeyUp);
+    div.addEventListener('focus', () => {
+      if (this._elementType === MarkdownElementTypes.OrderedList || this._elementType === MarkdownElementTypes.UnorderedList) {
+        Markdown.setEnableLineBreaks(true);
+      }
+      else {
+        Markdown.setEnableLineBreaks(false);
+      }
+    });
 
     this._caret = new VanillaCaret(div);
 
