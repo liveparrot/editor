@@ -67,7 +67,9 @@ interface MarkdownConstructor {
 
 enum MarkdownElementTypes {
   Header,
-  Paragraph
+  Paragraph,
+  UnorderedList,
+  OrderedList
 }
 
 const headerSanitizer = function(el: HTMLElement) {
@@ -88,23 +90,26 @@ const inlineCodeSanitizer = function(el: HTMLElement) {
 const SANITIZER_CONFIG: any = {
   p: false,
   h1: headerSanitizer,
-  // h1: headerSanitizer,
-  // h1: true,
-  // h2: headerSanitizer,
-  // h3: headerSanitizer,
-  // h4: headerSanitizer,
-  // h5: headerSanitizer,
-  // h6: headerSanitizer,
+  h2: headerSanitizer,
+  h3: headerSanitizer,
+  h4: headerSanitizer,
+  h5: headerSanitizer,
+  h6: headerSanitizer,
   ul: function(el: HTMLElement) {
     return {
-      li: true
+      class: true
+    }
+  },
+  ol: function(el: HTMLElement) {
+    return {
+      class: true
     }
   },
   li: true,
   em: true,
   strong: true,
   del: true,
-  code: inlineCodeSanitizer,
+  code: inlineCodeSanitizer
 };
 
 const KEY_HASH = 'digit3';
@@ -117,8 +122,8 @@ const MARKDOWN_VERIFIER: any = {
   '`': [/`/g],
 };
 
-const REGEX_MARKDOWN_HEADER = /^[#{1,6}][\s|\\u00A0|&nbsp;]{1}/g;
-const REGEX_MARKDOWN_LIST = /^-{1}[\s|\\u00A0].+/g;
+const REGEX_MARKDOWN_HEADER = /^#{1,6}[\s|\\u00A0|&nbsp;]{1}/;
+const REGEX_MARKDOWN_LIST = /^(-{1}|1\.)[\s|\\u00A0].+/;
 
 // const tokenizer: Tokenizer = {
 //   em(src: string) {
@@ -141,6 +146,8 @@ const REGEX_MARKDOWN_LIST = /^-{1}[\s|\\u00A0].+/g;
 // });
 
 class Markdown {
+
+  static _enableLineBreaks: boolean;
 
   data: any;
   api: API;
@@ -167,7 +174,14 @@ class Markdown {
   }
 
   static get enableLineBreaks() {
-    return true;
+    if (this._enableLineBreaks === undefined) {
+      this._enableLineBreaks = false;
+    }
+    return this._enableLineBreaks;
+  }
+
+  static setEnableLineBreaks(isEnabled: any) {
+    this._enableLineBreaks = isEnabled;
   }
 
   constructor(res: MarkdownConstructor) {
@@ -220,8 +234,6 @@ class Markdown {
 
     if (this.isMarkdownHeader(sanitizedKeyCode)) {
       const shouldConvertToHeader = REGEX_MARKDOWN_HEADER.test(inputValue);
-      console.log('Should convert to header?' + shouldConvertToHeader);
-
       if (shouldConvertToHeader) {
         this.parseBlockMarkdown();
         return true;
@@ -229,7 +241,6 @@ class Markdown {
     }
 
     const shouldConvertToList = REGEX_MARKDOWN_LIST.test(inputValue);
-      console.log('Should convert to lists?' + shouldConvertToList);
       if (shouldConvertToList) {
         this.parseBlockMarkdown();
         return true;
@@ -407,6 +418,10 @@ class Markdown {
     const blockMarkdown = marked(sanitizedInputValue);
     const newElement = this.api.sanitizer.clean(blockMarkdown, SANITIZER_CONFIG);
 
+    if (newElement.trim().length === 0) {
+      return;
+    }
+
     // Virtually create a new DOM with the newly parsed and sanitized markdown.
     const documentWithNewElement = new DOMParser().parseFromString(newElement, 'text/html');
     const documentBody = documentWithNewElement.getElementsByTagName('body');
@@ -416,16 +431,25 @@ class Markdown {
       const newElementFromDocument = documentBody[0].firstElementChild;
       const elementTag = newElementFromDocument!.tagName;
 
+      this.setElementTypeByTag(elementTag);
+
       const newElement = document.createElement(elementTag);
+      newElement.classList.add(...this.getElementClassesByTag(elementTag));
       // element.dataset.placeholder = 'Type something here';
       newElement.contentEditable = 'true';
+      newElement.addEventListener('focus', () => {
+        if (this._elementType === MarkdownElementTypes.OrderedList || this._elementType === MarkdownElementTypes.UnorderedList) {
+          Markdown.setEnableLineBreaks(true);
+        }
+        else {
+          Markdown.setEnableLineBreaks(false);
+        }
+      });
 
-      let elementToFocus = newElement;
-
-      if (elementTag.toLowerCase() === 'ul') {
-        newElement.contentEditable = 'true';
+      if (elementTag === 'UL' || elementTag === 'OL') {
         newElement.addEventListener('keydown', this.onListItemKeyDown);
 
+        console.log(newElementFromDocument);
         const listItemInnerHTML = newElementFromDocument!.firstElementChild?.innerHTML;
         
         const listItemElement = document.createElement('li');
@@ -433,8 +457,6 @@ class Markdown {
         
         listItemElement.innerHTML = listItemInnerHTML!;
         newElement.appendChild(listItemElement);
-
-        elementToFocus = listItemElement;
       }
       else {
         // TODO: Reassigning like this may cause performance issue.
@@ -446,19 +468,12 @@ class Markdown {
         newElement.addEventListener('keyup', this.onBlockKeyUp);
       }
 
-      const classByTag = this.getElementClassesByTag(elementTag);
-      if (classByTag.length > 0) {
-        newElement.classList.add(classByTag);
-      }
-
-      // this.setElementTypeByTag(elementTag);
       this._element.parentNode!.replaceChild(newElement, this._element);
       this._element = newElement;
-      this._caret = new VanillaCaret(elementToFocus);
+      this._caret = new VanillaCaret(this._element);
 
-      //this._element.focus();
-      elementToFocus.focus();
-      this._caret.setPos(elementToFocus.textContent!.length);
+      this._element.focus();
+      this._caret.setPos(this._element.textContent!.length);
     }
 
     // const matches = newElement.match(/^<[a-zA-Z1-6]+(>|.*?[^?]>)/);
@@ -584,51 +599,6 @@ class Markdown {
 
     this.checkAndParseInlineMarkdown(sanitizedKey);
   }
-
-  /**
-  onKeyUp(e: KeyboardEvent) {
-    const caretInitialPosition = this._caret.getPos();
-
-    let val = this._element.innerHTML;
-    // val = val.replace(/&nbsp;/g, ' ');
-
-
-    console.log('val:' + val + ';');
-    const a = turndown.turndown(val);
-    console.log('a:' + a + ';');
-
-    const res = marked(a);
-    console.log('res:' + res + ';');
-
-    const out = DOMPurify.sanitize(res, { FORBID_TAGS: ['p']});
-    console.log('out:' + out +';');
-
-    this._element.innerHTML = res;
-
-    // const text = this._element.textContent;
-    // console.log(text);
-
-    this._caret.setPos(caretInitialPosition);
-
-    // if (e.code.toLowerCase() === 'space') {
-    //   const inputValue = this._element.innerHTML;
-
-    //   if (inputValue.match(/^#{1,6} /g) === null) {
-    //     return true;
-    //   }
-
-    //   const stringified = inputValue?.toString();
-    //   if (stringified!.trim().length === 0) {
-    //     return;
-    //   }
-
-    //   this.parseToMarkdown(stringified);
-    //   return true;
-    // }
-
-    // this.doVerifyInlineMarkdown(); 
-  }
-  */
 
   onMarkdownElementKeyUp(e: KeyboardEvent) {
     this.doVerifyInlineMarkdown();
@@ -789,8 +759,6 @@ class Markdown {
         return;
       }
 
-      console.log('## elementtag:' + elementTag);
-
       const content = parsedData[1];
       const newElement = this.createNewElement(elementTag, content);
       
@@ -809,7 +777,7 @@ class Markdown {
     const { children } = content;
     if (children) {
       const element = document.createElement(tag);
-      element.classList.add(this.getElementClassesByTag(tag));
+      element.classList.add(...this.getElementClassesByTag(tag));
       // element.dataset.placeholder = 'Type something here';
       element.contentEditable = 'true';
       element.addEventListener('keydown', this.onKeyDown);
@@ -858,29 +826,48 @@ class Markdown {
     return `${childOpenTag}${childContent}</${childTag}>`;
   }
 
-  getElementClassesByTag(tag: string): string {
-    if (tag.indexOf('h') > -1) {
-      return 'ce-header';
+  getElementClassesByTag(tag: string): string[] {
+    const classes = [];
+    
+    switch (tag) {
+      case 'H':
+        classes.push('ce-header');
+        break;
+
+      case 'CODE':
+        classes.push('inline-code');
+        break;
+
+      case 'UL':
+        classes.push('cdx-list', 'cdx-list--unordered');
+        break;
+
+      case 'OL':
+        classes.push('cdx-list', 'cdx-list--ordered');
+        break;
     }
 
-    if (tag.indexOf('code') > -1) {
-      return 'inline-code';
-    }
-
-    if (tag.indexOf('li') > -1) {
-      return 'cdx-list';
-    }
-
-    return '';
+    return classes;
   }
 
   setElementTypeByTag(tag: string) {
-    if (tag.indexOf('h') > -1) {
-      this._elementType = MarkdownElementTypes.Header;
-      return;
-    }
+    switch (tag) {
+      case 'H':
+        this._elementType = MarkdownElementTypes.Header;
+        break;
 
-    this._elementType = MarkdownElementTypes.Paragraph;
+      case 'UL': 
+        this._elementType = MarkdownElementTypes.UnorderedList;
+        break;
+
+      case 'OL': 
+        this._elementType = MarkdownElementTypes.OrderedList;
+        break;
+
+      default:
+        this._elementType = MarkdownElementTypes.Paragraph;
+        break;
+    }
   }
 
   resetElement() {
