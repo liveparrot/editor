@@ -2,7 +2,7 @@ import React, {useRef} from 'react';
 import Editor from './Editor';
 
 import logo from './logo.svg';
-import './App.css';
+import './App.scss';
 
 function App() {
   const editor = useRef<any>(null);

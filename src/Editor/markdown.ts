@@ -4,7 +4,7 @@ import Token from 'markdown-it/lib/token';
 import VanillaCaret from 'vanilla-caret-js';
 
 import TurndownService from 'turndown';
-import marked, { MarkedOptions, Tokenizer } from 'marked';
+import marked, { MarkedOptions,  } from 'marked';
 import DOMPurify from 'dompurify';
 
 import Diff from 'diff';
@@ -95,10 +95,16 @@ const SANITIZER_CONFIG: any = {
   // h4: headerSanitizer,
   // h5: headerSanitizer,
   // h6: headerSanitizer,
+  ul: function(el: HTMLElement) {
+    return {
+      li: true
+    }
+  },
+  li: true,
   em: true,
   strong: true,
   del: true,
-  code: inlineCodeSanitizer
+  code: inlineCodeSanitizer,
 };
 
 const KEY_HASH = 'digit3';
@@ -111,22 +117,23 @@ const MARKDOWN_VERIFIER: any = {
   '`': [/`/g],
 };
 
-const REGEX_MARKDOWN_HEADER = /^#{1,6}[\s|\u00A0|&nbsp;]{1}/g;
+const REGEX_MARKDOWN_HEADER = /^[#{1,6}][\s|\\u00A0|&nbsp;]{1}/g;
+const REGEX_MARKDOWN_LIST = /^-{1}[\s|\\u00A0].+/g;
 
-const tokenizer: Tokenizer = {
-  em(src: string) {
-    const rules = /^_([^\s_])_(?!_)|^_([^\s_<][\s\S]*?[^\s_])_(?!_|[^\s,punctuation])|^_([^\s_<][\s\S]*?[^\s])_(?!_|[^\s,punctuation])/;
-    const cap = rules.exec(src);
+// const tokenizer: Tokenizer = {
+//   em(src: string) {
+//     const rules = /^_([^\s_])_(?!_)|^_([^\s_<][\s\S]*?[^\s_])_(?!_|[^\s,punctuation])|^_([^\s_<][\s\S]*?[^\s])_(?!_|[^\s,punctuation])/;
+//     const cap = rules.exec(src);
 
-    if (cap) {
-      return {
-        type: 'em',
-        raw: cap[0],
-        text: cap[3] || cap[2] || cap[1] || cap[0]
-      };
-    }
-  }
-};
+//     if (cap) {
+//       return {
+//         type: 'em',
+//         raw: cap[0],
+//         text: cap[3] || cap[2] || cap[1] || cap[0]
+//       };
+//     }
+//   }
+// };
 
 //marked.setOptions(options);
 // marked.use({
@@ -159,6 +166,10 @@ class Markdown {
     };
   }
 
+  static get enableLineBreaks() {
+    return true;
+  }
+
   constructor(res: MarkdownConstructor) {
     const { data, api } = res;
     this.data = data;
@@ -173,6 +184,8 @@ class Markdown {
     this.onKeyUp = this.onKeyUp.bind(this);
     this.onBlockKeyUp = this.onBlockKeyUp.bind(this);
     this.onMarkdownElementKeyUp = this.onMarkdownElementKeyUp.bind(this);
+
+    this.onListItemKeyDown = this.onListItemKeyDown.bind(this);
     
     this._elementType = MarkdownElementTypes.Paragraph;
     this._timeoutFunction = null;
@@ -199,12 +212,13 @@ class Markdown {
     return code === KEY_HASH || code === KEY_SPACE;
   }
 
-  checkAndParseMarkdownHeader(keyCode: string): boolean {
+  checkAndParseBlockMarkdown(keyCode: string): boolean {
     const sanitizedKeyCode = keyCode.toLowerCase();
-    if (this.isMarkdownHeader(sanitizedKeyCode)) {
-      const inputValue = this._element.innerHTML;
-      console.log('Input value:[' + inputValue + ']');
 
+    const inputValue = this._element.innerHTML;
+    console.log('Input value:[' + inputValue + ']');
+
+    if (this.isMarkdownHeader(sanitizedKeyCode)) {
       const shouldConvertToHeader = REGEX_MARKDOWN_HEADER.test(inputValue);
       console.log('Should convert to header?' + shouldConvertToHeader);
 
@@ -213,6 +227,13 @@ class Markdown {
         return true;
       }
     }
+
+    const shouldConvertToList = REGEX_MARKDOWN_LIST.test(inputValue);
+      console.log('Should convert to lists?' + shouldConvertToList);
+      if (shouldConvertToList) {
+        this.parseBlockMarkdown();
+        return true;
+      }
 
     return false;
   }
@@ -288,32 +309,182 @@ class Markdown {
     }
   }
 
+  get _currentListItem(): HTMLElement | null {
+    const selection = window.getSelection();
+    if (selection && selection.anchorNode) {
+      let currentNode: HTMLElement = selection.anchorNode as HTMLElement;
+
+      if (currentNode.nodeType !== Node.ELEMENT_NODE) {
+        currentNode = currentNode.parentNode! as HTMLElement;
+      }
+
+      // Smartly get the nearest node with the list item class CSS!
+      return currentNode.closest(`.cdx-list__item`);
+    }
+
+    return null;
+  }
+
+  _getCurrentListItemIndex(listElement: HTMLElement, selectedListItemNode: HTMLElement): number {
+    let position = -1;
+    listElement.childNodes.forEach((childNode, index) => {
+      const child = childNode as HTMLElement;
+      if (child === selectedListItemNode) {
+        position = index;
+      }
+    });
+
+    return position;
+  }
+
+  onListItemKeyDown(e: KeyboardEvent) {
+    const { key, target: listElement } = e;
+    const sanitizedKey = key.toLowerCase();
+
+    if 
+    (
+      (sanitizedKey === 'enter' || sanitizedKey === 'backspace') && 
+      listElement instanceof HTMLElement
+    ) {
+      const selectedListItemNode = this._currentListItem;
+      if (selectedListItemNode) {
+        const lengthOfItems = listElement.children.length;
+        const index = this._getCurrentListItemIndex(listElement, selectedListItemNode);
+
+        const isLastItem = index === (lengthOfItems - 1);
+
+        const inputValue: string = selectedListItemNode.textContent!.trim();
+        
+        // If empty text, then just remove this child and enter a new block.
+        if (inputValue.length === 0 && isLastItem) {
+          listElement.removeChild(selectedListItemNode);
+
+          // If the list already has more than 1 items, proceed to 
+          // go to the next line.
+          // If not, just remove the entire list object and revert
+          // to the original div content.
+          if (lengthOfItems > 1) {
+            this.insertAndFocusNewBlock();
+
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }
+      }
+    }
+  }
+
+  insertAndFocusNewBlock() {
+    const currentBlockIndex = this.api.blocks.getCurrentBlockIndex();
+    const newBlockIndex = currentBlockIndex + 1;
+
+    // Call API to insert a new block.
+    this.api.blocks.insert(undefined, undefined, undefined, newBlockIndex, true);
+
+    this.focusNextNewBlock(newBlockIndex);
+  }
+
+  focusNextNewBlock(newBlockIndex: number) {
+    // However, since the editable content is not directly at the new block,
+    // the editable content has to be obtained and set focus.
+    // The current structure sets that the editable content is 
+    // nested two times into the new block.
+    // If there is a change in strucutre, this has to change too!
+    const newBlock = this.api.blocks.getBlockByIndex(newBlockIndex);
+    const editableContentElement: any = newBlock.firstElementChild!.firstElementChild!
+    editableContentElement.focus();
+  }
+
+  removeNextBlock() {
+    this.api.blocks.delete(this.api.blocks.getCurrentBlockIndex() + 1);
+  }
+
   parseBlockMarkdown() {
     const inputValue = this._element.innerHTML;
     const sanitizedInputValue = inputValue.replace(/&nbsp;/g, ' ');
+    console.log('Sanitized Input Value:' + sanitizedInputValue +';');
 
     const blockMarkdown = marked(sanitizedInputValue);
     const newElement = this.api.sanitizer.clean(blockMarkdown, SANITIZER_CONFIG);
 
-    const matches = newElement.match(/^<[a-zA-Z1-6]+(>|.*?[^?]>)/);
-    if (matches) {
-      const firstOpeningTag = matches[0];
-      const elementTag = firstOpeningTag.replace('<', '').replace('>', '');
+    // Virtually create a new DOM with the newly parsed and sanitized markdown.
+    const documentWithNewElement = new DOMParser().parseFromString(newElement, 'text/html');
+    const documentBody = documentWithNewElement.getElementsByTagName('body');
+
+    if (documentBody.length > 0) {
+      // Obtain the first element child and create a new DOM element.
+      const newElementFromDocument = documentBody[0].firstElementChild;
+      const elementTag = newElementFromDocument!.tagName;
 
       const newElement = document.createElement(elementTag);
-      newElement.classList.add(this.getElementClassesByTag(elementTag));
       // element.dataset.placeholder = 'Type something here';
       newElement.contentEditable = 'true';
-      newElement.addEventListener('keydown', this.onTheRightKeyDown);
-      newElement.addEventListener('keyup', this.onBlockKeyUp);
+
+      let elementToFocus = newElement;
+
+      if (elementTag.toLowerCase() === 'ul') {
+        newElement.contentEditable = 'true';
+        newElement.addEventListener('keydown', this.onListItemKeyDown);
+
+        const listItemInnerHTML = newElementFromDocument!.firstElementChild?.innerHTML;
+        
+        const listItemElement = document.createElement('li');
+        listItemElement.classList.add('cdx-list__item');
+        
+        listItemElement.innerHTML = listItemInnerHTML!;
+        newElement.appendChild(listItemElement);
+
+        elementToFocus = listItemElement;
+      }
+      else {
+        // TODO: Reassigning like this may cause performance issue.
+        // May look into alternative of appending the child nodes directly.
+        // Not sure if there would be any reference issue.
+        newElement.innerHTML = newElementFromDocument!.innerHTML;
+
+        newElement.addEventListener('keydown', this.onTheRightKeyDown);
+        newElement.addEventListener('keyup', this.onBlockKeyUp);
+      }
+
+      const classByTag = this.getElementClassesByTag(elementTag);
+      if (classByTag.length > 0) {
+        newElement.classList.add(classByTag);
+      }
 
       // this.setElementTypeByTag(elementTag);
       this._element.parentNode!.replaceChild(newElement, this._element);
       this._element = newElement;
-      this._caret = new VanillaCaret(newElement);
+      this._caret = new VanillaCaret(elementToFocus);
 
-      this._element.focus();
+      //this._element.focus();
+      elementToFocus.focus();
+      this._caret.setPos(elementToFocus.textContent!.length);
     }
+
+    // const matches = newElement.match(/^<[a-zA-Z1-6]+(>|.*?[^?]>)/);
+    // if (matches) {
+    //   const firstOpeningTag = matches[0];
+    //   const elementTag = firstOpeningTag.replace('<', '').replace('>', '');
+
+    //   const newElement = document.createElement(elementTag);
+
+    //   const classByTag = this.getElementClassesByTag(elementTag);
+    //   if (classByTag.length > 0){
+    //     newElement.classList.add(classByTag);
+    //   }
+
+    //   // element.dataset.placeholder = 'Type something here';
+    //   newElement.contentEditable = 'true';
+    //   newElement.addEventListener('keydown', this.onTheRightKeyDown);
+    //   newElement.addEventListener('keyup', this.onBlockKeyUp);
+
+    //   // this.setElementTypeByTag(elementTag);
+    //   this._element.parentNode!.replaceChild(newElement, this._element);
+    //   this._element = newElement;
+    //   this._caret = new VanillaCaret(newElement);
+
+    //   this._element.focus();
+    // }
   }
 
   parseInlineMarkdown() {
@@ -379,7 +550,7 @@ class Markdown {
     const { code } = e;
     
     // This is working header validation.
-    if (this.checkAndParseMarkdownHeader(code)) {
+    if (this.checkAndParseBlockMarkdown(code)) {
       return;
     }
 
@@ -587,176 +758,6 @@ class Markdown {
     div.addEventListener('keydown', this.onTheRightKeyDown);
     div.addEventListener('keyup', this.onKeyUp);
 
-    // div.addEventListener('input', (e) => {
-    //   if (e.target instanceof Element) {
-    //     console.log('input:' + e.target.textContent);
-    //   }
-    // })
-    
-    // div.addEventListener('focus', () => {
-    //   // TODO: Also need to manage when user uses mouse to click.
-    //   // Using mouse to click will also need to remove selections.
-    //   this._rawCaretPosition = this._caret.getPos();
-    //   console.log('>> On Focus Caret Position: ' + this._rawCaretPosition);
-    // });
-
-    // div.addEventListener('keyup', (e) => {
-    //   // TODO: Firefox can select multiple?! Wataheck. Need to support that.
-    //   const selection = document.getSelection();
-    //   const { anchorOffset: start, focusOffset: end } = selection!;
-    //   this.setInputSelection(start, end);
-    // });
-
-    // div.addEventListener('keydown', (e) => {
-    //   console.log(e);
-    //   const caretPosition = this._rawCaretPosition;
-    //   console.log('Caret position:' + caretPosition);
-
-    //   const keyCode = e.keyCode || e.which;
-      
-    //   // Backspace
-    //   if (keyCode === 8) {
-    //     // TODO: Do something else here, or maybe nothing?
-    //     if (caretPosition === 0) {
-    //       return;
-    //     }
-
-    //     let removeIndex = caretPosition - 1;
-    //     let removeRange = 1;
-
-    //     if (this.hasSelection()) {
-    //       const { start, end } = this.getInputSelection();
-    //       console.log('> (' + start + ',' + end +')');
-
-    //       removeRange = Math.abs(end - start);
-    //       // If highlight from left to right
-    //       if (start < end) {
-    //         removeIndex = caretPosition - removeRange;
-    //       }
-    //       // If highlight from right to left
-    //       else if (start > end) {
-    //         removeRange = start - end;
-    //       }
-
-    //       if (this.hasSelectedAll()) {
-    //         this._rawCaretPosition = 0;
-    //       }
-
-    //       this.clearInputSelection();
-    //     }
-
-    //     console.log('caretPosition: ' + caretPosition +';RemoveIndex:' + removeIndex + '; removeRange:' + removeRange);
-    //     this._rawValue = this._rawValue.remove(removeIndex, removeRange);
-    //     return;
-    //   }
-
-    //   // Delete
-    //   if (keyCode === 46) {
-    //     this._rawValue = this._rawValue.remove(caretPosition, 1);
-    //     return;
-    //   }
-
-    //   // Left arrow
-    //   if (keyCode === 37) {
-    //     const selection = document.getSelection();
-    //     const { anchorOffset: start, focusOffset: end } = selection!;
-
-    //     // If arrow key was pressed but no change in selection
-    //     // also without holding shift, then the selection is being cleared.
-    //     // In this case, the caret position won't change direction.
-    //     if (
-    //       this.hasSelection() &&
-    //       !this.isSelectionChange(start, end) && 
-    //       e.shiftKey === false
-    //     ) {
-    //       console.log('Cancel any manipulation at left arrow');
-
-    //       if (this.hasSelectedAll()) {
-    //         this._rawCaretPosition = 0;
-    //       }
-
-    //       this.clearInputSelection();
-    //     }
-    //     else if (e.metaKey === true) {
-    //       this._rawCaretPosition = 0;
-    //     }
-    //     else {
-    //       this._rawCaretPosition = this._rawCaretPosition > 0 ? this._rawCaretPosition - 1 : 0;
-    //     }
-
-    //     return;
-    //   }
-
-    //   // Right arrow
-    //   if (keyCode === 39) {
-    //     const selection = document.getSelection();
-    //     const { anchorOffset: start, focusOffset: end } = selection!;
-
-    //     // If arrow key was pressed but no change in selection
-    //     // also without holding shift, then the selection is being cleared.
-    //     // In this case, the caret position won't change direction.
-    //     if (
-    //       this.hasSelection() &&
-    //       !this.isSelectionChange(start, end) && 
-    //       e.shiftKey === false
-    //     ) {
-    //       console.log('Cancel any manipulation at right arrow');
-
-    //       if (this.hasSelectedAll()) {
-    //         this._rawCaretPosition = this._rawValue.length;
-    //       }
-
-    //       this.clearInputSelection();
-    //     }
-    //     else if (e.metaKey === true) {
-    //       this._rawCaretPosition = this._rawValue.length;
-    //     }
-    //     else {
-    //       this._rawCaretPosition = this._rawCaretPosition >= this._rawValue.length ? this._rawCaretPosition : this._rawCaretPosition + 1;
-    //     }
-
-    //     return;
-    //   }
-
-    //   if (ignoredKeyCodes.indexOf(keyCode) > -1) {
-    //     return;
-    //   }
-
-    //   // Don't do anything if highlighting all via keyboard.
-    //   if (keyCode === 65 && e.metaKey === true) {
-    //     this.setInputSelectionAll();
-    //     return;
-    //   }
-
-    //   // if (e.target instanceof Element) {
-    //   //   const start = e.target.selectionStart;
-    //   //   const end = e.target.selectionEnd;
-    //   // }
-
-    //   const { key: characterInput } = e;
-
-    //   let indexModifier = caretPosition;
-    //   if (this.hasSelection()) {
-    //     const { start, end } = this.getInputSelection();
-
-    //     const removeRange = Math.abs(end - start);
-
-    //     // Selection direction is from left to right..
-    //     if (start < end) {
-    //       indexModifier = caretPosition - removeRange;
-    //     }
-    //     else if (end > start) {
-    //       this._rawCaretPosition -= removeRange;
-    //     }
-
-    //     this._rawValue = this._rawValue.remove(indexModifier, removeRange);
-    //   }
-      
-    //   this._rawValue = this._rawValue.insert(indexModifier, characterInput);
-    //   this._rawCaretPosition += 1;
-    //   console.log('value:'+ this._rawValue);
-    // })
-
     this._caret = new VanillaCaret(div);
 
     return div;
@@ -864,6 +865,10 @@ class Markdown {
 
     if (tag.indexOf('code') > -1) {
       return 'inline-code';
+    }
+
+    if (tag.indexOf('li') > -1) {
+      return 'cdx-list';
     }
 
     return '';
