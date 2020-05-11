@@ -150,8 +150,6 @@ class Markdown {
   _rawCaretPosition: number;
   _rawValue: string;
 
-  _tempHolder: any;
-  _onPressSpaceToEscapeMarkdown: boolean;
   _onPressShiftKey: boolean;
 
   _timeoutFunction: any;
@@ -190,6 +188,7 @@ class Markdown {
     this.onMarkdownElementKeyUp = this.onMarkdownElementKeyUp.bind(this);
 
     this.onListItemKeyDown = this.onListItemKeyDown.bind(this);
+    this.onListItemKeyUp = this.onListItemKeyUp.bind(this);
     
     this._elementType = MarkdownElementTypes.Paragraph;
     this._timeoutFunction = null;
@@ -197,8 +196,6 @@ class Markdown {
     this._editableSelection= [-1, -1, 0];
     this._rawCaretPosition = 0;
     this._rawValue = '';
-    this._tempHolder = [];
-    this._onPressSpaceToEscapeMarkdown = false;
     this._onPressShiftKey = false;
 
     this._element = this.drawView();
@@ -240,32 +237,20 @@ class Markdown {
   }
 
   checkAndClearMarkdown(keyCode: string): boolean {
+    const targetElement = this._activeElement;
+    if (!targetElement) {
+      return false;
+    }
+
     // TODO: Support delete button also.
     if (keyCode === 'backspace') {
-      const textContent = this._element.textContent!;
-
-      console.log('TExt content:' + textContent + ';');
+      const textContent = targetElement.textContent!;
 
       // Reset element.
       if (textContent.length === 0) {
         this.resetElement();
         return true;
       }
-    }
-
-    return false;
-  }
-
-  checkAndParseSpaceToEscapeMarkdown(keyCode: string): boolean {
-    const sanitizedKeyCode = keyCode.toLowerCase();
-    if (sanitizedKeyCode.toLowerCase() === 'space' && this._onPressSpaceToEscapeMarkdown) {
-      this._onPressSpaceToEscapeMarkdown = false;
-
-      const textContent = this._element.textContent!;
-      setTimeout(() => {
-        this._caret.setPos(textContent.length);
-      }, 50);
-      return true;
     }
 
     return false;
@@ -287,9 +272,18 @@ class Markdown {
   }
 
   checkAndParseInlineMarkdown(inputKey: string) {
+    console.log('# check and parse inline markdown');
     let toMarkdown = false;
 
-    const inputHTML = this._element.innerHTML;
+    const targetElement = this._activeElement;
+    if (!targetElement) {
+      console.log('Target element not found. Skip checking and parsing of inline markdown.');
+      return;
+    }
+
+    const inputHTML = targetElement.innerHTML;
+    console.log('Input html:' + inputHTML);
+    
     if (MARKDOWN_VERIFIER[inputKey]) {
       const matcher = MARKDOWN_VERIFIER[inputKey];
       matcher.every((matchingRegex: RegExp) => {
@@ -305,12 +299,23 @@ class Markdown {
       });
     }
 
+    console.log('To Markdown?' + toMarkdown);
     if (toMarkdown) {
       this.parseInlineMarkdown();
     }
   }
 
+  get _activeElement(): HTMLElement | null {
+    if (this._elementType === MarkdownElementTypes.OrderedList || 
+        this._elementType === MarkdownElementTypes.UnorderedList) {
+      return this._currentListItem;
+    }
+
+    return this._element;
+  }
+
   get _currentListItem(): HTMLElement | null {
+    console.log('Yo');
     const selection = window.getSelection();
     if (selection && selection.anchorNode) {
       let currentNode: HTMLElement = selection.anchorNode as HTMLElement;
@@ -320,7 +325,9 @@ class Markdown {
       }
 
       // Smartly get the nearest node with the list item class CSS!
-      return currentNode.closest(`.cdx-list__item`);
+      const node = currentNode.closest(`.cdx-list__item`) as HTMLElement;
+      console.log(node);
+      return node;
     }
 
     return null;
@@ -338,9 +345,55 @@ class Markdown {
     return position;
   }
 
+  get _accurateCaretPos(): any {
+    const caretPos = this._caret.getPos();
+
+    if (this._elementType === MarkdownElementTypes.OrderedList || 
+      this._elementType === MarkdownElementTypes.UnorderedList) {
+
+      const activeElement = this._currentListItem;
+      if (!activeElement) {
+        return {
+          value: caretPos,
+          relative: caretPos
+        };
+      }
+
+      const activeElementIndex = this._getCurrentListItemIndex(this._element, activeElement);
+
+      if (activeElementIndex < 1) {
+        return {
+          value: caretPos,
+          relative: caretPos
+        };
+      }
+
+      let previousCumulativeTextLengths = 0;
+      for (let i = 0 ; i < activeElementIndex ; i++) {
+        const child = this._element.childNodes.item(i) as HTMLElement;
+        previousCumulativeTextLengths += child.textContent ? child.textContent.length : 0;
+      }
+
+      const relativeCaretPos = caretPos - previousCumulativeTextLengths;
+      return {
+        value: caretPos,
+        relative: relativeCaretPos
+      };
+    } 
+
+    //return this._caret.getPos();
+    return {
+      value: caretPos,
+      relative: caretPos
+    }
+  }
+
   onListItemKeyDown(e: KeyboardEvent) {
-    const { key, target: listElement } = e;
-    const sanitizedKey = key.toLowerCase();
+    const { 
+      key: inputKey, 
+      target: listElement 
+    } = e;
+    const sanitizedKey = this.sanitizeInputKey(inputKey);
 
     if 
     (
@@ -369,10 +422,29 @@ class Markdown {
 
             e.preventDefault();
             e.stopPropagation();
+            return;
           }
         }
       }
     }
+
+    this.toggleNeutralCallbacks(e);    
+  }
+
+  onListItemKeyUp(e: KeyboardEvent) {
+    const { 
+      code, 
+      key: inputKey
+    } = e;
+    const sanitizedKey = this.sanitizeInputKey(inputKey);
+
+    console.log('caretpos:' + this._caret.getPos());
+
+    if (this.checkAndClearMarkdown(sanitizedKey)) {
+      return;
+    }
+
+    this.checkAndParseInlineMarkdown(sanitizedKey);
   }
 
   insertAndFocusNewBlock() {
@@ -438,6 +510,7 @@ class Markdown {
 
       if (elementTag === 'UL' || elementTag === 'OL') {
         newElement.addEventListener('keydown', this.onListItemKeyDown);
+        newElement.addEventListener('keyup', this.onListItemKeyUp);
 
         console.log(newElementFromDocument);
         const listItemInnerHTML = newElementFromDocument!.firstElementChild?.innerHTML;
@@ -493,13 +566,18 @@ class Markdown {
   }
 
   parseInlineMarkdown() {
-    const inlineMarkdown = marked(this._element.innerHTML);
-    // console.log(inlineMarkdown);
-    const newElement = this.api.sanitizer.clean(inlineMarkdown, SANITIZER_CONFIG);
-    // console.log('sanitized:' + newElement);
+    const targetElement = this._activeElement;
+    if (!targetElement) {
+      return;
+    }
 
-    this._element.innerHTML = newElement;
-    this._caret.setPos(this._element.textContent!.length)
+    const inlineMarkdown = marked(targetElement.innerHTML);
+    console.log(inlineMarkdown);
+    const newElement = this.api.sanitizer.clean(inlineMarkdown, SANITIZER_CONFIG);
+    console.log('sanitized:' + newElement);
+
+    targetElement.innerHTML = newElement;
+    this._caret.setPos(targetElement.textContent!.length)
   }
 
   onKeyDown(e: KeyboardEvent) {
@@ -520,17 +598,46 @@ class Markdown {
     }
   }
 
-  onTheRightKeyDown(e: KeyboardEvent) {
+  moveCursorToEnd(el: HTMLElement) {
+    el.focus();
+
+    if (typeof window.getSelection != "undefined"
+            && typeof document.createRange != "undefined") {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+
+        const sel = window.getSelection();
+        if (sel) {
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+    } 
+    // else if (typeof document.body.createTextRange != "undefined") {
+    //     var textRange = document.body.createTextRange();
+    //     textRange.moveToElementText(el);
+    //     textRange.collapse(false);
+    //     textRange.select();
+    // }
+}
+
+  toggleNeutralCallbacks(e: KeyboardEvent) {
+    console.log('here woohoo');
     const { code } = e;
     
-    this._rawValue = this._element.innerHTML;
+    const targetElement = this._activeElement;
+    if (!targetElement) {
+      return;
+    }
+    
+    this._rawValue = targetElement.innerHTML;
     
     if (code.toLowerCase() === 'space') {
-      const caretPos = this._caret.getPos();
-      const textContent = this._element.textContent!;
+      const { value: caretPos, relative } = this._accurateCaretPos;
+      const textContent = targetElement.textContent!;
 
-      if (caretPos >= (textContent.length - 1)) {
-        const inputHTML = this._element.innerHTML.replace('\n', '');
+      if (relative >= (textContent.length - 1)) {
+        const inputHTML = targetElement.innerHTML.replace('\n', '');
 
         const regex = /<\/[a-z][\s\S]*>$/;
         if (regex.test(inputHTML)) {
@@ -538,11 +645,19 @@ class Markdown {
           const sanitizedInputHTML = inputHTML.replace(`&nbsp;${matchingRegex[0]}`, matchingRegex[0]);
 
           const escapeMarkdownHTML = `${sanitizedInputHTML}&nbsp;`;
-          this._element.innerHTML = escapeMarkdownHTML;
-          this._caret.setPos(caretPos + 1);
+          targetElement.innerHTML = escapeMarkdownHTML;
 
-          this._onPressSpaceToEscapeMarkdown = true;
+          // Stop spacebar from kicking in!
+          e.preventDefault();
+          e.stopPropagation();
 
+          console.log('> caretpos:' + caretPos);
+          // if (caretPos === relative) {
+          //   this._caret.setPos(caretPos);
+          // } else {
+            // this._caret.setPos(caretPos + 1);
+            this.moveCursorToEnd(targetElement);
+          // }
           return;
         }
       }
@@ -551,15 +666,15 @@ class Markdown {
     this.toggleShiftKey(e);
   }
 
+  onTheRightKeyDown(e: KeyboardEvent) {
+    this.toggleNeutralCallbacks(e);
+  }
+
   onKeyUp(e: KeyboardEvent) {
     const { code } = e;
     
     // This is working header validation.
     if (this.checkAndParseBlockMarkdown(code)) {
-      return;
-    }
-
-    if (this.checkAndParseSpaceToEscapeMarkdown(code)) {
       return;
     }
     
@@ -574,12 +689,6 @@ class Markdown {
   }
 
   onBlockKeyUp(e: KeyboardEvent) {
-    const { code } = e;
-    
-    if (this.checkAndParseSpaceToEscapeMarkdown(code)) {
-      return;
-    }
-    
     const { key: inputKey } = e;
     const sanitizedKey = this.sanitizeInputKey(inputKey);
 
