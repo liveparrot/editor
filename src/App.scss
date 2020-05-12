@@ -37,10 +37,22 @@
   }
 }
 
+strong {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  -webkit-user-modify: read-write-plaintext-only;
+}
+
+em {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  -webkit-user-modify: read-write-plaintext-only;
+}
+
 del {
   white-space: pre-wrap;
-    overflow-wrap: break-word;
-    -webkit-user-modify: read-write-plaintext-only;
+  overflow-wrap: break-word;
+  -webkit-user-modify: read-write-plaintext-only;
 }
 
 .inline-code {

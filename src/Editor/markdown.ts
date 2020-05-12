@@ -109,27 +109,37 @@ const KEY_SPACE = 'space';
 const MARKDOWN_VERIFIER: any = {
   '*': [/\*\*/g, /\*/g],
   '_': [/__/g, /_/g],
-  '~': [/.?~.?/g],
-  //'`': [/`/g],
-  '`': [/.?`.?/g],
+  '~': [/~/g],
+  '`': [/`/g],
 };
 
 const REGEX_MARKDOWN_HEADER = /^#{1,6}[\s|\\u00A0|&nbsp;]{1}/;
 const REGEX_MARKDOWN_LIST = /^(-{1}|1\.)[\s|\\u00A0].+/;
 
 const tokenizer: Tokenizer = {
-  // em(src: string) {
-  //   const rules = /^_([^\s_])_(?!_)|^_([^\s_<][\s\S]*?[^\s_])_(?!_|[^\s,punctuation])|^_([^\s_<][\s\S]*?[^\s])_(?!_|[^\s,punctuation])/;
-  //   const cap = rules.exec(src);
+  strong(src: string) {
+    const rules = /^__([^\s_])__(?!_)|^\*\*([^\s*])\*\*(?!\*)|^__([\s\S]*?)__(?!_)|^\*\*([\s\S]*?)\*\*(?!\*)/;
+    const cap = rules.exec(src);
+    if (cap) {
+      return {
+        type: 'strong',
+        raw: cap[0],
+        text: cap[4] || cap[3] || cap[2] || cap[1]
+      };
+    }
+  },
+  em(src: string) {
+    const rules = /^_([^\s_])_(?!_)|^_([\s\S]*?)_(?!_|[^\s,punctuation])/;
+    const cap = rules.exec(src);
 
-  //   if (cap) {
-  //     return {
-  //       type: 'em',
-  //       raw: cap[0],
-  //       text: cap[3] || cap[2] || cap[1] || cap[0]
-  //     };
-  //   }
-  // }
+    if (cap) {
+      return {
+        type: 'em',
+        raw: cap[0],
+        text: cap[2] || cap[1]
+      };
+    }
+  },
   codespan(src: string) {
     const cap = /^(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/.exec(src);
     if (cap) {
