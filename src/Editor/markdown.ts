@@ -3,7 +3,7 @@ import MarkdownIt from 'markdown-it';
 import Token from 'markdown-it/lib/token';
 import VanillaCaret from 'vanilla-caret-js';
 
-import marked, { MarkedOptions,  } from 'marked';
+import marked, { MarkedOptions, Tokenizer } from 'marked';
 import DOMPurify from 'dompurify';
 
 import Diff from 'diff';
@@ -99,6 +99,7 @@ const SANITIZER_CONFIG: any = {
   em: true,
   strong: true,
   del: true,
+  br: true,
   code: inlineCodeSanitizer
 };
 
@@ -108,32 +109,61 @@ const KEY_SPACE = 'space';
 const MARKDOWN_VERIFIER: any = {
   '*': [/\*\*/g, /\*/g],
   '_': [/__/g, /_/g],
-  '~': [/\~/g],
-  '`': [/`/g],
+  '~': [/.?~.?/g],
+  //'`': [/`/g],
+  '`': [/.?`.?/g],
 };
 
 const REGEX_MARKDOWN_HEADER = /^#{1,6}[\s|\\u00A0|&nbsp;]{1}/;
 const REGEX_MARKDOWN_LIST = /^(-{1}|1\.)[\s|\\u00A0].+/;
 
-// const tokenizer: Tokenizer = {
-//   em(src: string) {
-//     const rules = /^_([^\s_])_(?!_)|^_([^\s_<][\s\S]*?[^\s_])_(?!_|[^\s,punctuation])|^_([^\s_<][\s\S]*?[^\s])_(?!_|[^\s,punctuation])/;
-//     const cap = rules.exec(src);
+const tokenizer: Tokenizer = {
+  // em(src: string) {
+  //   const rules = /^_([^\s_])_(?!_)|^_([^\s_<][\s\S]*?[^\s_])_(?!_|[^\s,punctuation])|^_([^\s_<][\s\S]*?[^\s])_(?!_|[^\s,punctuation])/;
+  //   const cap = rules.exec(src);
 
-//     if (cap) {
-//       return {
-//         type: 'em',
-//         raw: cap[0],
-//         text: cap[3] || cap[2] || cap[1] || cap[0]
-//       };
-//     }
-//   }
-// };
+  //   if (cap) {
+  //     return {
+  //       type: 'em',
+  //       raw: cap[0],
+  //       text: cap[3] || cap[2] || cap[1] || cap[0]
+  //     };
+  //   }
+  // }
+  codespan(src: string) {
+    const cap = /^(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/.exec(src);
+    if (cap) {
+      let text = cap[2].replace(/\n/g, ' ');
+      const hasNonSpaceChars = /[^ ]/.test(text);
+      const hasSpaceCharsOnBothEnds = text.startsWith(' ') && text.endsWith(' ');
+      if (hasNonSpaceChars && hasSpaceCharsOnBothEnds) {
+        text = text.substring(1, text.length - 1);
+      }
+      //text = escape(text, true);
+      return {
+        type: 'codespan',
+        raw: cap[0],
+        text: cap[2]
+      };
+    }
+  },
+  del(src: string) {
+    const rules = /^(~+)([^~]|[^~][\s\S]*?[^~])\1(?!~)/;
+    const cap = rules.exec(src);
+    if (cap) {
+      return {
+        type: 'del',
+        raw: cap[0],
+        text: cap[2]
+      }
+    }
+  }
+};
 
 //marked.setOptions(options);
-// marked.use({
-//   tokenizer
-// });
+marked.use({
+  tokenizer
+});
 
 class Markdown {
 
@@ -288,6 +318,7 @@ class Markdown {
       const matcher = MARKDOWN_VERIFIER[inputKey];
       matcher.every((matchingRegex: RegExp) => {
         const matches = inputHTML.match(matchingRegex);
+        console.log(matches);
 
         // Must exist and comes in pair!
         if (matches !== null && matches.length === 2) {
@@ -571,7 +602,9 @@ class Markdown {
       return;
     }
 
-    const inlineMarkdown = marked(targetElement.innerHTML);
+    const sanitizedInputValue = targetElement.innerHTML.replace(/&nbsp;/g, ' ');
+    console.log('sanitized:' + sanitizedInputValue);
+    const inlineMarkdown = marked(sanitizedInputValue);
     console.log(inlineMarkdown);
     const newElement = this.api.sanitizer.clean(inlineMarkdown, SANITIZER_CONFIG);
     console.log('sanitized:' + newElement);

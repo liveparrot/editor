@@ -37,6 +37,12 @@
   }
 }
 
+del {
+  white-space: pre-wrap;
+    overflow-wrap: break-word;
+    -webkit-user-modify: read-write-plaintext-only;
+}
+
 .inline-code {
   display: inline-block;
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
@@ -49,6 +55,9 @@
   font-size: 0.86em;
   font-weight: 500;
   letter-spacing: 0.3px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  -webkit-user-modify: read-write-plaintext-only;
 }
 
 /**
