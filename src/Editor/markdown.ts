@@ -473,17 +473,12 @@ class Markdown {
   }
 
   onListItemKeyUp(e: KeyboardEvent) {
-    const { 
-      code, 
-      key: inputKey
-    } = e;
+    const { key: inputKey } = e;
     const sanitizedKey = this.sanitizeInputKey(inputKey);
 
-    console.log('caretpos:' + this._caret.getPos());
-
-    if (this.checkAndClearMarkdown(sanitizedKey)) {
-      return;
-    }
+    // if (this.checkAndClearMarkdown(sanitizedKey)) {
+    //   return;
+    // }
 
     this.checkAndParseInlineMarkdown(sanitizedKey);
   }
