@@ -577,7 +577,7 @@ class Markdown {
     console.log('sanitized:' + newElement);
 
     targetElement.innerHTML = newElement;
-    this._caret.setPos(targetElement.textContent!.length)
+    this.moveCursorToEnd(targetElement);
   }
 
   onKeyDown(e: KeyboardEvent) {
