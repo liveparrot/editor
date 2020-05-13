@@ -136,3 +136,23 @@ del {
       }
   }
 }
+
+.code-block {
+  color: rgb(230, 236, 241);
+  display: block;
+  hyphens: none;
+  tab-size: 2;
+  direction: ltr;
+  font-size: 14px;
+  text-align: left;
+  word-break: normal;
+  font-family: "Source Code Pro", Consolas, Menlo, Monaco, Courier, monospace;
+  line-height: 1.4;
+  white-space: pre;
+  word-spacing: normal;
+  margin: 32px 0px;
+  padding: 24px 24px 24px 8px;
+  overflow: auto;
+  background: rgb(24, 48, 85);
+  border-radius: 3px;
+}

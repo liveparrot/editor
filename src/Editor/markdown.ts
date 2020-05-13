@@ -59,7 +59,8 @@ enum MarkdownElementTypes {
   Header,
   Paragraph,
   UnorderedList,
-  OrderedList
+  OrderedList,
+  Code
 }
 
 const headerSanitizer = function(el: HTMLElement) {
@@ -100,6 +101,7 @@ const SANITIZER_CONFIG: any = {
   strong: true,
   del: true,
   br: true,
+  pre: true,
   code: inlineCodeSanitizer
 };
 
@@ -490,26 +492,41 @@ class Markdown {
     // Call API to insert a new block.
     this.api.blocks.insert(undefined, undefined, undefined, newBlockIndex, true);
 
-    this.focusNextNewBlock(newBlockIndex);
+    this.focusOnBlock({ index: newBlockIndex });
   }
 
-  focusNextNewBlock(newBlockIndex: number) {
+  focusOnBlock({index, setCaretToInitialPositon}: {index: number, setCaretToInitialPositon?: boolean}) {
     // However, since the editable content is not directly at the new block,
     // the editable content has to be obtained and set focus.
-    // The current structure sets that the editable content is 
-    // nested two times into the new block.
-    // If there is a change in strucutre, this has to change too!
-    const newBlock = this.api.blocks.getBlockByIndex(newBlockIndex);
-    const editableContentElement: any = newBlock.firstElementChild!.firstElementChild!
-    editableContentElement.focus();
+    // Obtain the editable content by querying its property: contentEdtaible: true
+    const newBlock = this.api.blocks.getBlockByIndex(index);
+    
+    // const editableContentElement: any = newBlock.firstElementChild!.firstElementChild!
+    const editableContentElement: HTMLElement | null = newBlock.querySelector('[contentEditable="true"]');
+
+    if (editableContentElement) {
+      editableContentElement.focus();
+
+      if (setCaretToInitialPositon) {
+        const range = document.createRange();
+        range.setStart(editableContentElement, 0);
+        range.setEnd(editableContentElement, 0);
+
+        const selection = window.getSelection();
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      }
+    }
   }
 
   removeNextBlock() {
     this.api.blocks.delete(this.api.blocks.getCurrentBlockIndex() + 1);
   }
 
-  parseBlockMarkdown() {
-    const inputValue = this._element.innerHTML;
+  parseBlockMarkdown(value?: string) {
+    const inputValue = value || this._element.innerHTML;
     const sanitizedInputValue = inputValue.replace(/&nbsp;/g, ' ');
     console.log('Sanitized Input Value:' + sanitizedInputValue +';');
 
@@ -536,7 +553,9 @@ class Markdown {
       // element.dataset.placeholder = 'Type something here';
       newElement.contentEditable = 'true';
       newElement.addEventListener('focus', () => {
-        if (this._elementType === MarkdownElementTypes.OrderedList || this._elementType === MarkdownElementTypes.UnorderedList) {
+        if (this._elementType === MarkdownElementTypes.OrderedList || 
+          this._elementType === MarkdownElementTypes.UnorderedList ||
+          this._elementType === MarkdownElementTypes.Code) {
           Markdown.setEnableLineBreaks(true);
         }
         else {
@@ -705,6 +724,39 @@ class Markdown {
   }
 
   onTheRightKeyDown(e: KeyboardEvent) {
+    const sanitizedKeyCode = e.code.toLowerCase();
+    if (sanitizedKeyCode === 'enter' && e.target instanceof HTMLElement) {
+
+      // TODO: Support syntax highlighting with language set:
+      // ```js
+      // ```py
+      if (e.target.textContent?.trim() === '```') {
+
+        // If only there's a cleaner way to prevent creation
+        // of a new block line.
+        // Markdown.setEnableLineBreaks(true);
+        // e.preventDefault();
+        // e.stopPropagation();
+
+        this.parseBlockMarkdown('```\n```');
+
+        const currentBlockIndex = this.api.blocks.getCurrentBlockIndex();
+        this.api.blocks.delete(currentBlockIndex);
+
+        // Add a slight timeout to shift focus to the <pre> block.
+        setTimeout(() => {
+          this.focusOnBlock({ 
+            index: currentBlockIndex - 1, 
+            setCaretToInitialPositon: true
+          });
+        }, 50);
+
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+    }
+
     this.toggleNeutralCallbacks(e);
   }
 
@@ -990,6 +1042,10 @@ class Markdown {
       case 'OL':
         classes.push('cdx-list', 'cdx-list--ordered');
         break;
+
+      case 'PRE':
+        classes.push('code-block');
+        break;
     }
 
     return classes;
@@ -1007,6 +1063,10 @@ class Markdown {
 
       case 'OL': 
         this._elementType = MarkdownElementTypes.OrderedList;
+        break;
+
+      case 'PRE':
+        this._elementType = MarkdownElementTypes.Code;
         break;
 
       default:
