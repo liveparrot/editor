@@ -61,7 +61,8 @@ enum MarkdownElementTypes {
   Paragraph,
   UnorderedList,
   OrderedList,
-  Code
+  Code,
+  Quote
 }
 
 const headerSanitizer = function(el: HTMLElement) {
@@ -106,6 +107,7 @@ const SANITIZER_CONFIG: any = {
     pre: true,
     div: true,
     code: inlineCodeSanitizer,
+    blockquote: true,
   },
   keepNestedBlockElements: true,
 };
@@ -124,6 +126,7 @@ const MARKDOWN_VERIFIER: any = {
 
 const REGEX_MARKDOWN_HEADER = /^#{1,6}[\s|\\u00A0|&nbsp;]{1}/;
 const REGEX_MARKDOWN_LIST = /^(-{1}|1\.)[\s|\\u00A0].+/;
+const REGEX_MARKDOWN_QUOTE = /^>[\s|\\u00A0]/;
 
 const escapeTest = /[&<>"']/;
 const escapeReplace = /[&<>"']/g;
@@ -137,7 +140,7 @@ const escapeReplacements: {[key: string]: string} = {
   "'": '&#39;'
 };
 const getEscapeReplacement = (ch: string) => escapeReplacements[ch];
-function escape(html: string, encode: boolean) {
+function theEscape(html: string, encode: boolean) {
   if (encode) {
     if (escapeTest.test(html)) {
       return html.replace(escapeReplace, getEscapeReplacement);
@@ -168,9 +171,9 @@ const renderer: any = {
       if (lang) {
         return '<pre><code class="'
           + this.options.langPrefix
-          + escape(lang, true)
+          + theEscape(lang, true)
           + '">'
-          + (escaped ? code : escape(code, false))
+          + (escaped ? code : theEscape(code, false))
           + '</code></pre>\n';
       }
     }
@@ -178,8 +181,12 @@ const renderer: any = {
     // Don't think I need to escape as converting to the
     // <pre> tag markdown..
     return '<pre><div class="code-edit">'
-        + (escaped ? code : escape(code, false))
+        + (escaped ? code : theEscape(code, false))
         + '</div></pre>\n';
+  },
+
+  blockquote(quote: string) {
+    return '<blockquote><div>' + quote + '</div></blockquote>\n';
   }
 }
 
@@ -338,10 +345,18 @@ class Markdown {
     }
 
     const shouldConvertToList = REGEX_MARKDOWN_LIST.test(inputValue);
-      if (shouldConvertToList) {
-        this.parseBlockMarkdown();
-        return true;
-      }
+    if (shouldConvertToList) {
+      this.parseBlockMarkdown();
+      return true;
+    }
+
+    // inputValue.replace
+    const shouldConvertToQuote = REGEX_MARKDOWN_QUOTE.test(this._element.textContent!);
+    console.log('quote?' + shouldConvertToQuote);
+    if (shouldConvertToQuote) {
+      this.parseBlockMarkdown('> &#8203;');
+      return true;
+    }
 
     return false;
   }
@@ -606,7 +621,10 @@ class Markdown {
 
   parseBlockMarkdown(value?: string) {
     const inputValue = value || this._element.innerHTML;
-    const sanitizedInputValue = inputValue.replace(/&nbsp;/g, ' ');
+    console.log('test sanitize:' + unescape(inputValue));
+    const sanitizedInputValue = inputValue
+        .replace(/&nbsp;/g, ' ')
+        . replace(/^&gt;/, '>');
     console.log('Sanitized Input Value:' + sanitizedInputValue +';');
 
     const blockMarkdown = marked(sanitizedInputValue);
@@ -636,7 +654,8 @@ class Markdown {
       newElement.addEventListener('focus', () => {
         if (this._elementType === MarkdownElementTypes.OrderedList || 
           this._elementType === MarkdownElementTypes.UnorderedList ||
-          this._elementType === MarkdownElementTypes.Code) {
+          this._elementType === MarkdownElementTypes.Code || 
+          this._elementType === MarkdownElementTypes.Quote) {
           Markdown.setEnableLineBreaks(true);
         }
         else {
@@ -657,7 +676,7 @@ class Markdown {
         listItemElement.innerHTML = listItemInnerHTML!;
         newElement.appendChild(listItemElement);
       }
-      else if (elementTag === 'PRE') {
+      else if (elementTag === 'PRE' || elementTag === 'BLOCKQUOTE') {
         // TODO: Reassigning like this may cause performance issue.
         // May look into alternative of appending the child nodes directly.
         // Not sure if there would be any reference issue.
@@ -1134,6 +1153,10 @@ class Markdown {
       case 'PRE':
         classes.push('code-block');
         break;
+
+      case 'BLOCKQUOTE':
+        classes.push('quote');
+        break;
     }
 
     return classes;
@@ -1155,6 +1178,10 @@ class Markdown {
 
       case 'PRE':
         this._elementType = MarkdownElementTypes.Code;
+        break;
+
+      case 'BLOCKQUOTE':
+        this._elementType = MarkdownElementTypes.Quote;
         break;
 
       default:
