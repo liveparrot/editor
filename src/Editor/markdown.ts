@@ -2,6 +2,7 @@ import { API, SanitizerConfig } from '@editorjs/editorjs';
 import MarkdownIt from 'markdown-it';
 import Token from 'markdown-it/lib/token';
 import VanillaCaret from 'vanilla-caret-js';
+import HTMLJanitor from 'html-janitor';
 
 import marked, { MarkedOptions, Tokenizer } from 'marked';
 import DOMPurify from 'dompurify';
@@ -79,31 +80,37 @@ const inlineCodeSanitizer = function(el: HTMLElement) {
 };
 
 const SANITIZER_CONFIG: any = {
-  p: false,
-  h1: headerSanitizer,
-  h2: headerSanitizer,
-  h3: headerSanitizer,
-  h4: headerSanitizer,
-  h5: headerSanitizer,
-  h6: headerSanitizer,
-  ul: function(el: HTMLElement) {
-    return {
-      class: true
-    }
+  tags: {
+    p: false,
+    h1: headerSanitizer,
+    h2: headerSanitizer,
+    h3: headerSanitizer,
+    h4: headerSanitizer,
+    h5: headerSanitizer,
+    h6: headerSanitizer,
+    ul: function(el: HTMLElement) {
+      return {
+        class: true
+      }
+    },
+    ol: function(el: HTMLElement) {
+      return {
+        class: true
+      }
+    },
+    li: true,
+    em: true,
+    strong: true,
+    del: true,
+    br: true,
+    pre: true,
+    div: true,
+    code: inlineCodeSanitizer,
   },
-  ol: function(el: HTMLElement) {
-    return {
-      class: true
-    }
-  },
-  li: true,
-  em: true,
-  strong: true,
-  del: true,
-  br: true,
-  pre: true,
-  code: inlineCodeSanitizer
+  keepNestedBlockElements: true,
 };
+
+const janitor = new HTMLJanitor(SANITIZER_CONFIG)
 
 const KEY_HASH = 'digit3';
 const KEY_SPACE = 'space';
@@ -117,6 +124,64 @@ const MARKDOWN_VERIFIER: any = {
 
 const REGEX_MARKDOWN_HEADER = /^#{1,6}[\s|\\u00A0|&nbsp;]{1}/;
 const REGEX_MARKDOWN_LIST = /^(-{1}|1\.)[\s|\\u00A0].+/;
+
+const escapeTest = /[&<>"']/;
+const escapeReplace = /[&<>"']/g;
+const escapeTestNoEncode = /[<>"']|&(?!#?\w+;)/;
+const escapeReplaceNoEncode = /[<>"']|&(?!#?\w+;)/g;
+const escapeReplacements: {[key: string]: string} = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;'
+};
+const getEscapeReplacement = (ch: string) => escapeReplacements[ch];
+function escape(html: string, encode: boolean) {
+  if (encode) {
+    if (escapeTest.test(html)) {
+      return html.replace(escapeReplace, getEscapeReplacement);
+    }
+  } else {
+    if (escapeTestNoEncode.test(html)) {
+      return html.replace(escapeReplaceNoEncode, getEscapeReplacement);
+    }
+  }
+
+  return html;
+}
+
+const renderer: any = {
+  code(code: string, infostring: string | undefined, escaped: boolean) {
+    const matcher = (infostring || '').match(/\S*/);
+    if (matcher) {
+      const lang = matcher[0];
+
+      if (this.options.highlight) {
+        const out = this.options.highlight(code, lang);
+        if (out != null && out !== code) {
+          escaped = true;
+          code = out;
+        }
+      }
+
+      if (lang) {
+        return '<pre><code class="'
+          + this.options.langPrefix
+          + escape(lang, true)
+          + '">'
+          + (escaped ? code : escape(code, false))
+          + '</code></pre>\n';
+      }
+    }
+
+    // Don't think I need to escape as converting to the
+    // <pre> tag markdown..
+    return '<pre><div class="code-edit">'
+        + (escaped ? code : escape(code, false))
+        + '</div></pre>\n';
+  }
+}
 
 const tokenizer: Tokenizer = {
   strong(src: string) {
@@ -174,7 +239,8 @@ const tokenizer: Tokenizer = {
 
 //marked.setOptions(options);
 marked.use({
-  tokenizer
+  tokenizer,
+  renderer
 });
 
 class Markdown {
@@ -231,6 +297,8 @@ class Markdown {
 
     this.onListItemKeyDown = this.onListItemKeyDown.bind(this);
     this.onListItemKeyUp = this.onListItemKeyUp.bind(this);
+
+    this.onPreCodeKeyDown = this.onPreCodeKeyDown.bind(this);
     
     this._elementType = MarkdownElementTypes.Paragraph;
     this._timeoutFunction = null;
@@ -485,6 +553,17 @@ class Markdown {
     this.checkAndParseInlineMarkdown(sanitizedKey);
   }
 
+  onPreCodeKeyDown(e: KeyboardEvent) {
+    const { key: inputKey } = e;
+
+    if (inputKey.toLowerCase() === 'enter' && e.metaKey) {
+      this.insertAndFocusNewBlock();
+
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }
+
   insertAndFocusNewBlock() {
     const currentBlockIndex = this.api.blocks.getCurrentBlockIndex();
     const newBlockIndex = currentBlockIndex + 1;
@@ -531,7 +610,9 @@ class Markdown {
     console.log('Sanitized Input Value:' + sanitizedInputValue +';');
 
     const blockMarkdown = marked(sanitizedInputValue);
-    const newElement = this.api.sanitizer.clean(blockMarkdown, SANITIZER_CONFIG);
+    console.log('bd', blockMarkdown);
+    // const newElement = this.api.sanitizer.clean(blockMarkdown, SANITIZER_CONFIG);
+    const newElement = janitor.clean(blockMarkdown);
 
     if (newElement.trim().length === 0) {
       return;
@@ -576,7 +657,14 @@ class Markdown {
         listItemElement.innerHTML = listItemInnerHTML!;
         newElement.appendChild(listItemElement);
       }
-      else {
+      else if (elementTag === 'PRE') {
+        // TODO: Reassigning like this may cause performance issue.
+        // May look into alternative of appending the child nodes directly.
+        // Not sure if there would be any reference issue.
+        newElement.innerHTML = newElementFromDocument!.innerHTML;
+
+        newElement.addEventListener('keydown', this.onPreCodeKeyDown);
+      } else {
         // TODO: Reassigning like this may cause performance issue.
         // May look into alternative of appending the child nodes directly.
         // Not sure if there would be any reference issue.
@@ -738,7 +826,7 @@ class Markdown {
         // e.preventDefault();
         // e.stopPropagation();
 
-        this.parseBlockMarkdown('```\n```');
+        this.parseBlockMarkdown('```\n&#8203;\n```');
 
         const currentBlockIndex = this.api.blocks.getCurrentBlockIndex();
         this.api.blocks.delete(currentBlockIndex);

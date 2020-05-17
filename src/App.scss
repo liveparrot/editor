@@ -156,3 +156,34 @@ del {
   background: rgb(24, 48, 85);
   border-radius: 3px;
 }
+
+.code-block .code-edit {
+  position: relative;
+  overflow-wrap: normal;
+  white-space: pre;
+  counter-increment: line 1;
+  font: inherit;
+  padding: 0px 14px 0px 44px;
+}
+
+.code-block .code-edit:only-child {
+  padding-left: 30px;
+}
+
+.code-edit:not(:only-child)::before {
+  top: 2px;
+  left: 4px;
+  color: rgb(92, 105, 117);
+  width: 24px;
+  bottom: 0px;
+  content: counter(line);
+  display: inline-block;
+  position: absolute;
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background-color: transparent;
+  user-select: none;
+  overflow: hidden;
+}
