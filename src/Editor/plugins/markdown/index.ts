@@ -9,7 +9,7 @@ import DOMPurify from 'dompurify';
 
 import Diff from 'diff';
 
-import "../ext-string";
+import "./ext-string";
 
 // const customRenderer = new marked.Renderer();
 // customRenderer.prototype.paragraph = function(text) {
@@ -30,22 +30,6 @@ const ignoredKeyCodes = [
   8,9,13,16,17,18,19,20,27,33,34,35,36,37,38,39,40,45,46,91,92,93,112,113,114,115,116,117,118,119,120,121,122,123,144,145
 ]
 
-const escapes: [RegExp, string][] = [
-  // [/\\/g, '\\\\'],
-  // [/\*/g, '\\*'],
-  // [/^-/g, '\\-'],
-  // [/^\+ /g, '\\+ '],
-  // [/^(=+)/g, '\\$1'],
-  // [/^(#{1,6}) /g, '\\$1 '],
-  // [/`/g, '\\`'],
-  // [/^~~~/g, '\\~~~'],
-  // [/\[/g, '\\['],
-  // [/\]/g, '\\]'],
-  // [/^>/g, '\\>'],
-  // [/_/g, '\\_'],
-  // [/^(\d+)\. /g, '$1\\. ']
-  [/&nbsp;/g, ' ']
-]
 
 const md = new MarkdownIt()
   .enable(['strikethrough']);
@@ -331,6 +315,7 @@ class Markdown {
   }
 
   checkAndParseBlockMarkdown(keyCode: string): boolean {
+    console.log('on down key code:' + keyCode + ';');
     const sanitizedKeyCode = keyCode.toLowerCase();
 
     const inputValue = this._element.innerHTML;
