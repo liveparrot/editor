@@ -104,24 +104,33 @@ class BaseMarkdown {
     }
 
     const inputHTML: string = targetElement.innerHTML;
+    const sanitizedInputHTML = inputHTML.replace(/&nbsp;/g, ' ');
 
     if (this._isMarkdownBlockHeader(sanitizedKeyCode)) {
-      const shouldConvertToHeader = rules.block.header.test(inputHTML);
+      const shouldConvertToHeader = rules.block.header.test(sanitizedInputHTML);
       if (shouldConvertToHeader) {
         this.parseBlockMarkdown();
         return true;
       }
     }
 
-    const shouldConvertToList = rules.block.list.test(inputHTML);
+    const shouldConvertToList = rules.block.list.test(sanitizedInputHTML);
     if (shouldConvertToList) {
-      this.parseBlockMarkdown();
+      let valueToParse = undefined;
+      const matcher = sanitizedInputHTML.match(rules.block.list);
+      // Get the second matched group which would determine if there are any characters
+      // after the delimeter of list.
+      if (matcher && matcher[2].length === 0) {
+        valueToParse = `${matcher.input}${KEY_ZERO_WIDTH_SPACE}`;
+      }
+      
+      this.parseBlockMarkdown(valueToParse);
       return true;
     }
 
     const shouldConvertToQuote = rules.block.quote.test(targetElement.textContent!);
     if (shouldConvertToQuote) {
-      this.parseBlockMarkdown('> &#8203;');
+      this.parseBlockMarkdown(`> ${KEY_ZERO_WIDTH_SPACE}`);
       return true;
     }
 
@@ -221,8 +230,6 @@ class BaseMarkdown {
 
     const blockMarkdown = marked(sanitizedInputHTML);
     const sanitizedNewElement = this.__janitor.clean(blockMarkdown);
-
-    console.log('sanitized new element:' + sanitizedNewElement);
 
     if (sanitizedNewElement.trim().length === 0) {
       console.warn('No new element created after sanitizing. Skipping parsing of block markdown');
@@ -557,7 +564,7 @@ class BaseMarkdown {
         // e.preventDefault();
         // e.stopPropagation();
 
-        this.parseBlockMarkdown('```\n&#8203;\n```');
+        this.parseBlockMarkdown('```\n' + KEY_ZERO_WIDTH_SPACE +'\n```');
 
         const currentBlockIndex = this.api.blocks.getCurrentBlockIndex();
         this.api.blocks.delete(currentBlockIndex);
@@ -671,7 +678,11 @@ class BaseMarkdown {
     //   return;
     // }
 
-    this.checkAndParseInlineMarkdown(sanitizedKey);
+    if (this.checkAndParseInlineMarkdown(sanitizedKey)) {
+      return;
+    }
+
+    this.checkAndClearZeroWidthCharacter(e.target as HTMLElement);
   }
 
   /**

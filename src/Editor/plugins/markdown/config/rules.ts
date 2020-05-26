@@ -2,7 +2,7 @@ import { MarkdownBlockTypes, RegexBlock, RegexVerifiers } from '../types';
 
 const block: RegexBlock = {
   header: /^#{1,6}[\s|\\u00A0|&nbsp;]{1}/,
-  list: /^(-{1}|1\.)[\s|\\u00A0].+/,
+  list: /^(-{1}|1\.|\*{1})[\s|\\u00A0](\S*)/,
   quote: /^>[\s|\\u00A0]/
 };
 
