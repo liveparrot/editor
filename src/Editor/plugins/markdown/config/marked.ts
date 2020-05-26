@@ -1,4 +1,5 @@
 import { Tokenizer } from 'marked';
+import classes from '../classes';
 
 /**
  * Plugged configurations from markedjs library.
@@ -62,7 +63,9 @@ export const renderer: any = {
   },
 
   blockquote(quote: string) {
-    return '<blockquote><div>' + quote + '</div></blockquote>\n';
+    const divClasses = classes['DIV'];
+    const formattedDivClasses = divClasses.join(', ');
+    return `<blockquote><div class="${formattedDivClasses}">` + quote + '</div></blockquote>\n';
   }
 }
 
