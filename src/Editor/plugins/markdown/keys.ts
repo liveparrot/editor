@@ -1,3 +1,5 @@
+export const KEY_ZERO_WIDTH_SPACE = '&#8203;';
+
 export const KEY_CODE_HASH = 'digit3';
 export const KEY_CODE_SPACE = 'space';
 export const KEY_CODE_BACKSPACE = 'backpsace';

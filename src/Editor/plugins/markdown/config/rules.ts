@@ -15,6 +15,8 @@ const verifier: RegexVerifiers = {
 
 const endTag = /<\/[a-z][\s\S]*>$/;
 
+const zeroWidthCharacter = /\u200B/g;
+
 const blockWithCustomLineBreaks: MarkdownBlockTypes[] = [
   MarkdownBlockTypes.OrderedList,
   MarkdownBlockTypes.UnorderedList,
@@ -26,5 +28,6 @@ export default {
   block,
   verifier,
   endTag,
+  zeroWidthCharacter,
   blockWithCustomLineBreaks
 }

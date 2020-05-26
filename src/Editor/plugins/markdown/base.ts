@@ -8,6 +8,7 @@ import { MarkdownConstructor, MarkdownBlockTypes, CaretAccuratePosition } from "
 import { sanitizerConfig } from './config/sanitizer';
 import { renderer, tokenizer } from './config/marked';
 import { 
+  KEY_ZERO_WIDTH_SPACE,
   KEY_CODE_HASH, 
   KEY_CODE_SPACE, 
   KEY_CODE_BACKSPACE,
@@ -182,6 +183,34 @@ class BaseMarkdown {
     return false;
   }
 
+  /**
+   * Removes any zero width special character if found.
+   * Use this function in a keyup event.
+   * 
+   * It manipulated the value of the element by resetting the innerHTML
+   * 
+   * @param element {HTMLElement} Element to perform checks and manipulation
+   * @returns If successfully parsed
+   */
+  checkAndClearZeroWidthCharacter(element: HTMLElement): boolean {
+    const value = element.textContent;
+    if (!value) {
+      return false;
+    }
+    
+    // If character is found, results of matcher will return an array of matched conditions.
+    const zeroWidthCharMatcher = value.match(rules.zeroWidthCharacter);
+    if (zeroWidthCharMatcher !== null && value.trim().length > 1) {
+      element.innerHTML = element.innerHTML.replace(rules.zeroWidthCharacter, '');
+
+      // Reset position of caret.
+      this.moveCursorToEnd(element);
+      return true;
+    }
+
+    return false;
+  }
+
   parseBlockMarkdown(value?: string) {
     const inputHTML = value || this.element.innerHTML;
     const sanitizedInputHTML = inputHTML
@@ -192,6 +221,8 @@ class BaseMarkdown {
 
     const blockMarkdown = marked(sanitizedInputHTML);
     const sanitizedNewElement = this.__janitor.clean(blockMarkdown);
+
+    console.log('sanitized new element:' + sanitizedNewElement);
 
     if (sanitizedNewElement.trim().length === 0) {
       console.warn('No new element created after sanitizing. Skipping parsing of block markdown');
@@ -240,6 +271,11 @@ class BaseMarkdown {
     else if (elementTag === 'PRE' || elementTag === 'BLOCKQUOTE') {
       newElement.innerHTML = newVirtualElementFromDocument!.innerHTML;
       newElement.addEventListener('keydown', this._onPreCodeKeyDown);
+      newElement.addEventListener('keyup', (e) => {
+        if (e.target instanceof HTMLElement) {
+          this.checkAndClearZeroWidthCharacter(e.target);
+        }
+      })
     }
     else {
       // TODO: Reassigning like this may cause performance issue.
@@ -571,6 +607,8 @@ class BaseMarkdown {
   }
 
   _onPreCodeKeyDown(e: KeyboardEvent) {
+    const { absolute, relative } = this.getAccurateCaretPos();
+      console.log('abs:' + absolute + '; rel:' + relative);
     const { key: inputKey } = e;
     const sanitizedKey = sanitizeInputKeyEvent(inputKey, this._onPressShiftKey);
 
