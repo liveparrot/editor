@@ -1,4 +1,4 @@
-import Markdown from './plugins/markdown';
+import Markdown from './plugins/markdown/_index';
 import MarkdownBase from './plugins/markdown/base';
 import Header from '@editorjs/header';
 import List from '@editorjs/list';
