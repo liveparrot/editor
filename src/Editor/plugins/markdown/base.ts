@@ -77,6 +77,7 @@ class BaseMarkdown {
     this._onKeyUp = this._onKeyUp.bind(this);
     this._onBlockKeyUp = this._onBlockKeyUp.bind(this);
     this._onPreCodeKeyDown = this._onPreCodeKeyDown.bind(this);
+    this._onPreCodeKeyUp = this._onPreCodeKeyUp.bind(this);
     this._onListItemKeyDown = this._onListItemKeyDown.bind(this);
     this._onListItemKeyUp = this._onListItemKeyUp.bind(this);
 
@@ -278,11 +279,7 @@ class BaseMarkdown {
     else if (elementTag === 'PRE' || elementTag === 'BLOCKQUOTE') {
       newElement.innerHTML = newVirtualElementFromDocument!.innerHTML;
       newElement.addEventListener('keydown', this._onPreCodeKeyDown);
-      newElement.addEventListener('keyup', (e) => {
-        if (e.target instanceof HTMLElement) {
-          this.checkAndClearZeroWidthCharacter(e.target);
-        }
-      })
+      newElement.addEventListener('keyup', this._onPreCodeKeyUp);
     }
     else {
       // TODO: Reassigning like this may cause performance issue.
@@ -323,25 +320,15 @@ class BaseMarkdown {
       this._blockType === MarkdownBlockTypes.UnorderedList) {
       return this.getCurrentListItem();
     }
+    else if (this._blockType === MarkdownBlockTypes.Quote) {
+      return this.getCurrentListItem('ce-paragraph');
+    }
 
     return this.element;
   }
 
-  getCurrentListItem(): HTMLElement | null {
-    const selection = window.getSelection();
-    if (selection && selection.anchorNode) {
-      let currentNode: HTMLElement = selection.anchorNode as HTMLElement;
-
-      if (currentNode.nodeType !== Node.ELEMENT_NODE) {
-        currentNode = currentNode.parentNode! as HTMLElement;
-      }
-
-      // Smartly get the nearest node with the list item class CSS!
-      const node = currentNode.closest(`.cdx-list__item`) as HTMLElement;
-      return node;
-    }
-
-    return null;
+  getCurrentListItem(childClass: string = `cdx-list__item`): HTMLElement | null {
+    return this._getCurrentListItemByClass(childClass);
   }
 
   getCurrentListItemIndex(listElement: HTMLElement, selectedListItemNode: HTMLElement): number {
@@ -402,6 +389,7 @@ class BaseMarkdown {
     if (!targetElement) {
       return;
     }
+    
 
     if (sanitizedKeyCode === KEY_CODE_SPACE) {
       const { relative } = this.getAccurateCaretPos();
@@ -424,7 +412,18 @@ class BaseMarkdown {
           this.moveCursorToEnd(targetElement);
           return;
         }
-      }      
+      }
+    }
+    else if (sanitizedKeyCode === KEY_CODE_ENTER && this._blockType === MarkdownBlockTypes.Quote) {
+      const element = this.getActiveElement();
+
+      // Apply a `cheating` zero width key at the end of the active element (row),
+      // then move the cursor to the end.
+      // Upon `keyup` event, the "enter" or new line will be added after the div without
+      // copying the current inline formatting.
+      element!.innerHTML = `${element!.innerHTML}${KEY_ZERO_WIDTH_SPACE}`;
+      this.moveCursorToEnd(element!);
+      return;
     }
     
     this.toggleShiftKey(e);
@@ -614,8 +613,6 @@ class BaseMarkdown {
   }
 
   _onPreCodeKeyDown(e: KeyboardEvent) {
-    const { absolute, relative } = this.getAccurateCaretPos();
-      console.log('abs:' + absolute + '; rel:' + relative);
     const { key: inputKey } = e;
     const sanitizedKey = sanitizeInputKeyEvent(inputKey, this._onPressShiftKey);
 
@@ -626,6 +623,21 @@ class BaseMarkdown {
       e.stopPropagation();
       return;
     }
+
+    if (this._blockType === MarkdownBlockTypes.Quote) {
+      this.toggleNeutralCallbacks(e);
+    }
+  }
+
+  _onPreCodeKeyUp(e: KeyboardEvent) {
+    const { key: inputKey, target } = e;
+    const sanitizedKey = sanitizeInputKeyEvent(inputKey, this._onPressShiftKey);
+
+    if (this.checkAndParseInlineMarkdown(sanitizedKey)) {
+      return;
+    }
+
+    this.checkAndClearZeroWidthCharacter(target as HTMLElement);
   }
 
   _onListItemKeyDown(e: KeyboardEvent) {
@@ -691,6 +703,23 @@ class BaseMarkdown {
    */
   _isMarkdownBlockHeader(keyCode: string): boolean {
     return keyCode === KEY_CODE_HASH || keyCode === KEY_CODE_SPACE;
+  }
+
+  _getCurrentListItemByClass(childClass: string): HTMLElement | null {
+    const selection = window.getSelection();
+    if (selection && selection.anchorNode) {
+      let currentNode: HTMLElement = selection.anchorNode as HTMLElement;
+
+      if (currentNode.nodeType !== Node.ELEMENT_NODE) {
+        currentNode = currentNode.parentNode! as HTMLElement;
+      }
+      const node = currentNode.closest(`.${childClass}`) as HTMLElement;
+
+      // Smartly get the nearest node with the list item class CSS!
+      return node;
+    }
+
+    return null;
   }
 
   _getElementClassesByTag(tag: string): readonly string[] {
