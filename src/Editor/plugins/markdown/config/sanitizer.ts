@@ -49,7 +49,10 @@ export const sanitizerConfig: SanitizerConfig = {
     },
     code: inlineCodeSanitizer,
     blockquote: true,
-    hr: true
+    hr: true,
+    a: true,
+    b: true,
+    i: true
   },
   keepNestedBlockElements: true
 }

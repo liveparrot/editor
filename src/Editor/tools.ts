@@ -8,7 +8,10 @@ import Code from '@editorjs/code';
 import TestPlugin from './custom';
 
 const plugins: any = {
-  paragraph: MarkdownBase,
+  paragraph: {
+    class: MarkdownBase,
+    inlineToolbar: true
+  }
   // markdown: Markdown,
   // header: Header,
   // list: List,
