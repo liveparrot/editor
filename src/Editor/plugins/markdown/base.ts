@@ -49,6 +49,17 @@ class BaseMarkdown {
     };
   }
 
+  /**
+   * Automatic sanitize config.
+   * This is called whenever `save` function is being called
+   */
+  static get sanitize(){
+    return {
+      blockType: false, // disallow HTML
+      text: true,
+    }
+  }
+
   static get enableLineBreaks() {
     if (this.__enableLineBreaks === undefined) {
       this.__enableLineBreaks = false;
@@ -88,8 +99,11 @@ class BaseMarkdown {
     return this.element;
   }
   
-  save(content: any) {
-    console.log('## save:', content);
+  save(content: HTMLElement) {
+    return {
+      blockType: this._blockType,
+      text: content.innerHTML
+    }
   }
 
   /**

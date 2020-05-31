@@ -1,13 +1,13 @@
 import { API } from "@editorjs/editorjs";
 
 export enum MarkdownBlockTypes {
-  Header,
-  Paragraph,
-  UnorderedList,
-  OrderedList,
-  Code,
-  Quote,
-  Breakline
+  Header = "header",
+  Paragraph = "paragraph",
+  UnorderedList = "unorderedlist",
+  OrderedList = "orderedlist",
+  Code = "code",
+  Quote = "quote",
+  Breakline = "breakline"
 };
 
 export interface MarkdownConstructor {
