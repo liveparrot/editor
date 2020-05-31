@@ -4,7 +4,7 @@ import HTMLJanitor from 'html-janitor';
 import VanillaCaret from 'vanilla-caret-js';
 
 // Local imports.
-import { MarkdownConstructor, MarkdownBlockTypes, CaretAccuratePosition } from "./types";
+import { MarkdownConstructor, MarkdownBlockTypes, CaretAccuratePosition, MarkdownParserConfig } from "./types";
 import { sanitizerConfig } from './config/sanitizer';
 import { renderer, tokenizer } from './config/marked';
 import { 
@@ -93,6 +93,7 @@ class BaseMarkdown {
     this._onListItemKeyUp = this._onListItemKeyUp.bind(this);
 
     this.element = this.drawDefaultView();
+    this._loadFromData();
   }
 
   render() {
@@ -100,9 +101,10 @@ class BaseMarkdown {
   }
   
   save(content: HTMLElement) {
+    const c = (content.parentNode! as HTMLElement).innerHTML
     return {
       blockType: this._blockType,
-      text: content.innerHTML
+      text: c
     }
   }
 
@@ -248,7 +250,7 @@ class BaseMarkdown {
     return false;
   }
 
-  parseBlockMarkdown(value?: string) {
+  parseBlockMarkdown(value?: string, config?: MarkdownParserConfig) {
     const inputHTML = value || this.element.innerHTML;
     const sanitizedInputHTML = inputHTML
         .replace(/&nbsp;/g, ' ')
@@ -329,12 +331,22 @@ class BaseMarkdown {
       newElement.addEventListener('keyup', this._onBlockKeyUp);
     }
 
-    this.element.parentNode!.replaceChild(newElement, this.element);
+    if (this.element.parentNode) {
+      this.element.parentNode!.replaceChild(newElement, this.element);
+    }
+    else {
+      console.warn('Element parent is not found. Is element rendered on screen? Or has it a parent wrapper?')
+    }
+    
     this.element = newElement;
     this._caret = new VanillaCaret(this.element);
 
-    this.element.focus();
-    this._caret.setPos(this.element.textContent!.length);
+    if (config) {
+      if (config.autoFocus !== false) {
+        this.element.focus();
+        this._caret.setPos(this.element.textContent!.length);    
+      }
+    }
 
     // A special condition if the nested's child is a horizontal line.
     // Then set the contenteditable to false.
@@ -631,6 +643,21 @@ class BaseMarkdown {
     return false;
   }
 
+  /**
+   * Draws the default view of the block container
+   */
+  _loadFromData() {
+    console.log('Data?,', this.data);
+    if (this.data && Object.keys(this.data).length > 0) {
+      this._blockType = this.data.blockType;
+      console.log(this.element);
+      this.element.innerHTML = this.data.text;
+      console.log(this.element);
+    }
+    
+    // this.parseBlockMarkdown(this.data.text, { autoFocus: false });
+  }
+
   _onBlockFocus() {
     const enableLineBreaks = rules.blockWithCustomLineBreaks.includes(this._blockType);
     BaseMarkdown.setEnableLineBreaks(enableLineBreaks);
@@ -822,8 +849,14 @@ class BaseMarkdown {
   } 
 
   _setBlockElementTypeByTag(tag: string) {
+    console.log('set block elemetn by tag:' + tag);
     switch (tag) {
-      case 'H':
+      case 'H1':
+      case 'H2':
+      case 'H3':
+      case 'H4':
+      case 'H5':
+      case 'H6':
         this._blockType = MarkdownBlockTypes.Header;
         break;
 

@@ -57,3 +57,7 @@ export interface InputMarkdownParser {
   keyCode?: string;
   event?: KeyboardEvent;
 }
+
+export interface MarkdownParserConfig {
+  autoFocus: boolean;
+}

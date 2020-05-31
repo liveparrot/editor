@@ -1,14 +1,35 @@
-import * as React from 'react';
+import React, { useState, useEffect } from 'react';
 import EditorJS from 'react-editor-js';
 
 import tools from './tools';
 
 const Editor = (props: any) => {
+  const [data, setData] = useState(undefined);
   const { instanceRef } = props;
+
+  const loadDataFromLocalStorage = () => {
+    const dataString = localStorage.getItem('editorData');
+    try {
+      if (dataString) {
+        const jsonData = JSON.parse(dataString);
+        setData(jsonData);
+      }
+    } catch (err) {
+      console.warn(err);
+    }
+  };
+
+  useEffect(() => {
+    loadDataFromLocalStorage();
+  }, []);
+
   return (
     <EditorJS 
       instanceRef={instance => {instanceRef.current = instance}} 
       tools={tools} 
+      data={data}
+      enableReInitialize
+      autofocus
       // data={{
       //   time: 1556098174501,
       //   blocks: [
@@ -43,7 +64,6 @@ const Editor = (props: any) => {
       //   ],
       //   version: "2.12.4"
       // }}
-      autofocus
     />
   )
 };
