@@ -7,6 +7,7 @@ import VanillaCaret from 'vanilla-caret-js';
 import { MarkdownConstructor, MarkdownBlockTypes, CaretAccuratePosition, MarkdownParserConfig } from "./types";
 import { sanitizerConfig } from './config/sanitizer';
 import { renderer, tokenizer } from './config/marked';
+import { blockConfig } from './config/parser';
 import { 
   KEY_ZERO_WIDTH_SPACE,
   KEY_CODE_HASH, 
@@ -341,11 +342,10 @@ class BaseMarkdown {
     this.element = newElement;
     this._caret = new VanillaCaret(this.element);
 
-    if (config) {
-      if (config.autoFocus !== false) {
-        this.element.focus();
-        this._caret.setPos(this.element.textContent!.length);    
-      }
+    const parserConfig = config || blockConfig;
+    if (parserConfig.autoFocus === true) {
+      this.element.focus();
+      this._caret.setPos(this.element.textContent!.length);    
     }
 
     // A special condition if the nested's child is a horizontal line.
