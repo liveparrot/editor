@@ -117,6 +117,13 @@ class BaseMarkdown {
 
     const shouldConvertToList = rules.block.list.test(sanitizedInputHTML);
     if (shouldConvertToList) {
+
+      if (this.shouldAddToPreviousList(sanitizedInputHTML)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return true;
+      }
+
       let valueToParse = undefined;
       const matcher = sanitizedInputHTML.match(rules.block.list);
       // Get the second matched group which would determine if there are any characters
@@ -287,7 +294,6 @@ class BaseMarkdown {
       // The first inner item of the list.
       // It would be created when markdown is parsed.
       const listItem = newVirtualElementFromDocument!.firstElementChild!;
-      
       const listItemElement = document.createElement(listItem.tagName);
       listItemElement.classList.add(...this._getElementClassesByTag(listItem.tagName));
 
@@ -569,6 +575,46 @@ class BaseMarkdown {
 
   removeNextBlock() {
     this.api.blocks.delete(this.api.blocks.getCurrentBlockIndex() + 1);
+  }
+
+  shouldAddToPreviousList(sanitizedInputHTML: string) {
+    const currentBlockIndex = this.api.blocks.getCurrentBlockIndex();
+
+    if (currentBlockIndex > 0) {
+      const previousBlock = this.api.blocks.getBlockByIndex(currentBlockIndex - 1);
+      const editableContentElement: HTMLElement | null = previousBlock.querySelector('[contentEditable="true"]');
+
+      if (editableContentElement && (editableContentElement.tagName === 'UL' || editableContentElement.tagName === 'OL')) {
+
+        const isCreatingNewOrderedList = rules.orderedListDelimeter.test(sanitizedInputHTML);
+        if ((isCreatingNewOrderedList && editableContentElement.tagName === 'OL') ||
+            (!isCreatingNewOrderedList && editableContentElement.tagName === 'UL')
+        ) {
+          const matcher = sanitizedInputHTML.match(rules.block.list)!;
+          const ihtml = matcher[2];
+
+          const listItemElement = document.createElement('LI');
+          listItemElement.classList.add(...this._getElementClassesByTag(listItemElement.tagName));
+          listItemElement.innerHTML = ihtml;
+
+          editableContentElement.appendChild(listItemElement);
+ 
+          this.api.blocks.delete(currentBlockIndex);
+
+          // A slight delay highlight the cursor to the end of the list (just added )
+          // as the previously edited block is deleted.
+          // This is required so that the cursor highlights the correct list item.
+          // If not, it'll break the UX flow.
+          setTimeout(() => {
+            this.moveCursorToEnd(listItemElement);
+          }, 50);
+
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   _onBlockFocus() {
