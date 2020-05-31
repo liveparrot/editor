@@ -93,8 +93,7 @@ class BaseMarkdown {
     this._onListItemKeyDown = this._onListItemKeyDown.bind(this);
     this._onListItemKeyUp = this._onListItemKeyUp.bind(this);
 
-    this.element = this.drawDefaultView();
-    this._loadFromData();
+    this.element = this._initView();
   }
 
   render() {
@@ -643,19 +642,45 @@ class BaseMarkdown {
     return false;
   }
 
+  _initView(): HTMLElement {
+    let element: HTMLElement;
+
+    if (this.data && Object.keys(this.data).length > 0) {
+      element = this._loadFromData(this.data);
+    }
+    else {
+      element = this.drawDefaultView();
+    }
+
+    return element;
+  }
+
   /**
    * Draws the default view of the block container
    */
-  _loadFromData() {
-    console.log('Data?,', this.data);
-    if (this.data && Object.keys(this.data).length > 0) {
-      this._blockType = this.data.blockType;
-      console.log(this.element);
-      this.element.innerHTML = this.data.text;
-      console.log(this.element);
+  _loadFromData(data: any): HTMLElement {
+    this._blockType = data.blockType;
+
+    // Virtually create a new DOM with the newly parsed and sanitized markdown.
+    const documentWithNewElement = new DOMParser().parseFromString(data.text, 'text/html');
+
+    // The virtual DOM will create `<document>..<body>..</body></document`.
+    // Safe to assume that the body can be immediately accessed from the document.
+    // However the body may be empty!
+    const documentBody = documentWithNewElement.getElementsByTagName('body');
+
+    if (documentBody.length === 0 || documentBody[0].children.length === 0) {
+      console.warn('The virtual DOM has an empty body. Skipping parsing of block markdown');
+      return this.drawDefaultView();
+    }
+
+    // Obtain the first element child and create a new DOM element.
+    const newVirtualElementFromDocument = documentBody[0].firstElementChild;
+    if (!newVirtualElementFromDocument) {
+      return this.drawDefaultView();
     }
     
-    // this.parseBlockMarkdown(this.data.text, { autoFocus: false });
+    return newVirtualElementFromDocument as HTMLElement;
   }
 
   _onBlockFocus() {
