@@ -42,9 +42,14 @@ export const sanitizerConfig: SanitizerConfig = {
     del: true,
     br: true,
     pre: true,
-    div: true,
+    div: function() {
+      return {
+        class: true
+      };
+    },
     code: inlineCodeSanitizer,
     blockquote: true,
+    hr: true
   },
   keepNestedBlockElements: true
 }

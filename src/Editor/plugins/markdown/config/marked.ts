@@ -66,6 +66,10 @@ export const renderer: any = {
     const divClasses = classes['DIV'];
     const formattedDivClasses = divClasses.join(', ');
     return `<blockquote><div class="${formattedDivClasses}">` + quote + '</div></blockquote>\n';
+  },
+  
+  hr() {
+    return this.options.xhtml ? '<div class="horizontal-break"><hr/></div>\n' : '<div class="horizontal-break"><hr></div>\n';
   }
 }
 

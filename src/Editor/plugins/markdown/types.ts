@@ -6,7 +6,8 @@ export enum MarkdownBlockTypes {
   UnorderedList,
   OrderedList,
   Code,
-  Quote
+  Quote,
+  Breakline
 };
 
 export interface MarkdownConstructor {
@@ -26,6 +27,7 @@ export interface RegexBlock {
   header: RegExp;
   list: RegExp;
   quote: RegExp;
+  breakline: RegExp;
 }
 
 export interface RegexVerifiers {

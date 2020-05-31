@@ -195,3 +195,14 @@ del {
   border-left: 4px solid rgb(230, 236, 241);
   border-color: rgb(230, 236, 241);
 }
+
+.horizontal-break {
+  padding: 32px 0 24px;
+}
+
+.horizontal-break > hr {
+  line-height: 1.6em;
+  height: 1px;
+  border: 0px;
+  background-color: rgb(230, 236, 241);
+}

@@ -135,6 +135,12 @@ class BaseMarkdown {
       return true;
     }
 
+    const shouldConvertToBreakline = rules.block.breakline.test(sanitizedInputHTML);
+    if (shouldConvertToBreakline) {
+      this.parseBlockMarkdown();
+      return true;
+    }
+
     return false;
   }
 
@@ -245,19 +251,31 @@ class BaseMarkdown {
     // However the body may be empty!
     const documentBody = documentWithNewElement.getElementsByTagName('body');
 
-    if (documentBody.length === 0) {
+    if (documentBody.length === 0 || documentBody[0].children.length === 0) {
       console.warn('The virtual DOM has an empty body. Skipping parsing of block markdown');
       return;
     }
 
     // Obtain the first element child and create a new DOM element.
     const newVirtualElementFromDocument = documentBody[0].firstElementChild;
-    const elementTag = newVirtualElementFromDocument!.tagName;
 
-    this._setBlockElementTypeByTag(elementTag);
+    // Attempt to obtain any nested child element's tag.
+    let nestedChildTagName = null;
+    if (newVirtualElementFromDocument!.firstElementChild) {
+      const firstChild = newVirtualElementFromDocument!.firstElementChild!;
+      nestedChildTagName = firstChild.tagName === 'HR' ? firstChild.tagName : null;
+    }
+
+    const elementTag = newVirtualElementFromDocument!.tagName;
+    
+    // This target element can be derived from either the first element parsed, or the nested child.
+    // This is important as the horizontal rule needs special parsing.
+    const targetElement = nestedChildTagName || elementTag;
+
+    this._setBlockElementTypeByTag(targetElement);
 
     const newElement = document.createElement(elementTag);
-    newElement.classList.add(...this._getElementClassesByTag(elementTag));
+    newElement.classList.add(...this._getElementClassesByTag(targetElement));
     // newElement.dataset.placeholder = 'Type something here';
     newElement.contentEditable = 'true';
     newElement.addEventListener('focus', this._onBlockFocus);
@@ -297,6 +315,16 @@ class BaseMarkdown {
 
     this.element.focus();
     this._caret.setPos(this.element.textContent!.length);
+
+    // A special condition if the nested's child is a horizontal line.
+    // Then set the contenteditable to false.
+    // Also include the new <hr> element and insert a new block in the editor.
+    if (nestedChildTagName === 'HR') {
+      newElement.contentEditable = 'false';
+      newElement.innerHTML = newVirtualElementFromDocument!.innerHTML;
+
+      this.insertAndFocusNewBlock();
+    }
   }
 
   parseInlineMarkdown() {
@@ -753,6 +781,10 @@ class BaseMarkdown {
 
       case 'BLOCKQUOTE':
         this._blockType = MarkdownBlockTypes.Quote;
+        break;
+
+      case 'HR':
+        this._blockType = MarkdownBlockTypes.Breakline;
         break;
 
       default:

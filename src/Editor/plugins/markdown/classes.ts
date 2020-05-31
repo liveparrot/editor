@@ -8,7 +8,8 @@ const classes: CSSClasses = {
   'OL': ['cdx-list', 'cdx-list--ordered'],
   'LI': ['cdx-list__item'],
   'PRE': ['code-block'],
-  'BLOCKQUOTE': ['quote']
+  'BLOCKQUOTE': ['quote'],
+  'HR': ['horizontal-break']
 };
 
 export default classes;
