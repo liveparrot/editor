@@ -59,5 +59,18 @@ export interface InputMarkdownParser {
 }
 
 export interface MarkdownParserConfig {
-  autoFocus: boolean;
+  isInitiatingElement?: boolean;
+  autoFocus?: boolean;
+}
+
+export interface EditorBlockFocus {
+  index: number;
+  setCaretToInitialPosition?: boolean;
+}
+
+export interface SanitizedInputKeyEvent {
+  event: KeyboardEvent;
+  target: HTMLElement;
+  code: string;
+  key: string;
 }

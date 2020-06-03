@@ -1,16 +1,32 @@
-import Markdown from './plugins/markdown/_index';
-import MarkdownBase from './plugins/markdown/base';
-import Header from '@editorjs/header';
-import List from '@editorjs/list';
-import InlineCode from '@editorjs/inline-code';
-import Code from '@editorjs/code';
+import { Markdown, Header } from './plugins/markdown';
 
-import TestPlugin from './custom';
+// import Paragraph from '@editorjs/paragraph';
+// import Header from '@editorjs/header';
+// import List from '@editorjs/list';
+// import InlineCode from '@editorjs/inline-code';
+// import Code from '@editorjs/code';
+import ImageTool from '@editorjs/image';
+
+// import TestPlugin from './custom';
 
 const plugins: any = {
+  // paragraph: {
+  //   class: Paragraph,
+  //   inlineToolbar: true
+  // },
   paragraph: {
-    class: MarkdownBase,
+    class: Markdown,
     inlineToolbar: true
+  },
+  header: Header,
+  image: { 
+    class: ImageTool,
+    config: {
+      endpoints: {
+        byFile: 'http://localhost:3000/uploadFile', // Your backend file uploader endpoint
+        byUrl: 'http://localhost:3000/fetchUrl', // Your endpoint that provides uploading by Url
+      }
+    }
   }
   // markdown: Markdown,
   // header: Header,

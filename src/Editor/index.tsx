@@ -19,8 +19,19 @@ const Editor = (props: any) => {
     }
   };
 
+  const onCustomEvent = () => {
+    console.log('Boo shakalaka');
+  }
+
   useEffect(() => {
     loadDataFromLocalStorage();
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener('myevent', onCustomEvent);;
+    return () => {
+      document.removeEventListener('myevent', onCustomEvent);
+    }
   }, []);
 
   return (

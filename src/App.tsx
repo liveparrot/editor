@@ -12,6 +12,8 @@ function App() {
       const { current: editorRef} = editor;
       const data = await editorRef.save();
       console.log(data);
+
+      localStorage.setItem('editorData', JSON.stringify(data));
     }
   }
 
@@ -20,9 +22,9 @@ function App() {
       <div>
         <Editor instanceRef={editor} />
       </div>
-      {/* <div>
+      <div>
         <input type="button" onClick={onSaveClick} value="Save" />
-      </div> */}
+      </div>
     </div>
     // <div className="App">
     //   <header className="App-header">

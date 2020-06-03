@@ -17,7 +17,7 @@ function inlineCodeSanitizer(el: HTMLElement) {
  * Declares the configuration used with HTML-Janitor library
  * for sanitizing the html elements.
  */
-export const sanitizerConfig: SanitizerConfig = {
+const sanitizerConfig: SanitizerConfig = {
   tags: {
     p: false,
     h1: headerSanitizer,
@@ -56,3 +56,7 @@ export const sanitizerConfig: SanitizerConfig = {
   },
   keepNestedBlockElements: true
 }
+
+export default {
+  sanitizerConfig
+};

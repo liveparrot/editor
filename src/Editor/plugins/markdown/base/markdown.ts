@@ -1,13 +1,11 @@
-import { API } from "@editorjs/editorjs";
 import marked from 'marked';
 import HTMLJanitor from 'html-janitor';
 import VanillaCaret from 'vanilla-caret-js';
 
 // Local imports.
-import { MarkdownConstructor, MarkdownBlockTypes, CaretAccuratePosition, MarkdownParserConfig } from "./types";
-import { sanitizerConfig } from './config/sanitizer';
-import { renderer, tokenizer } from './config/marked';
-import { blockConfig } from './config/parser';
+import BaseBlockHelper from './block';
+import { MarkdownConstructor, MarkdownBlockTypes, CaretAccuratePosition, MarkdownParserConfig, SanitizedInputKeyEvent } from "../types";
+import { sanitizer, markedConfig, parser, rules } from '../config';
 import { 
   KEY_ZERO_WIDTH_SPACE,
   KEY_CODE_HASH, 
@@ -16,21 +14,19 @@ import {
   sanitizeKeyCodeEvent,
   sanitizeInputKeyEvent,
   KEY_CODE_ENTER
-} from './keys';
-import classes from './classes';
-import rules from './config/rules';
+} from '../keys';
+import classes from '../classes';
 
 
 /**
  * A base class that implements the general Markdown verifications.
  */
-class BaseMarkdown {
+class BaseMarkdown extends BaseBlockHelper {
 
   /**
    * Class variables
    */
   data: any;
-  api: API;
   element: HTMLElement;
 
   // Data property
@@ -38,6 +34,7 @@ class BaseMarkdown {
   _onPressShiftKey!: boolean;
 
   // Other helper functions
+  marked: any;
   _caret: any;
   __janitor!: any;
 
@@ -54,7 +51,7 @@ class BaseMarkdown {
    * Automatic sanitize config.
    * This is called whenever `save` function is being called
    */
-  static get sanitize(){
+  static get sanitize() {
     return {
       blockType: false, // disallow HTML
       text: true,
@@ -77,21 +74,19 @@ class BaseMarkdown {
    * @param res 
    */
   constructor(res: MarkdownConstructor) {
-    const { data, api } = res;
+    super(res);
+
+    const { data } = res;
     this.data = data;
-    this.api = api;
 
     this.__setDefaultParameters();
     this.__setDefaultConfigurations();
 
+    this.marked = marked;
+
     this._onBlockFocus = this._onBlockFocus.bind(this);
-    this._onKeyDown = this._onKeyDown.bind(this);
-    this._onKeyUp = this._onKeyUp.bind(this);
-    this._onBlockKeyUp = this._onBlockKeyUp.bind(this);
-    this._onPreCodeKeyDown = this._onPreCodeKeyDown.bind(this);
-    this._onPreCodeKeyUp = this._onPreCodeKeyUp.bind(this);
-    this._onListItemKeyDown = this._onListItemKeyDown.bind(this);
-    this._onListItemKeyUp = this._onListItemKeyUp.bind(this);
+    this._onInputKeyDown = this._onInputKeyDown.bind(this);
+    this._onInputKeyUp = this._onInputKeyUp.bind(this);
 
     this.element = this._initView();
   }
@@ -250,7 +245,14 @@ class BaseMarkdown {
     return false;
   }
 
-  parseBlockMarkdown(value?: string, config?: MarkdownParserConfig) {
+  parseMarkdownAndSanitize(inputHTML: string): string {
+    const blockMarkdown = marked(inputHTML);
+    const sanitizedNewElement = this.__janitor.clean(blockMarkdown);
+
+    return sanitizedNewElement;
+  }
+
+  parseBlockMarkdown(value?: string, config?: MarkdownParserConfig): HTMLElement | null {
     const inputHTML = value || this.element.innerHTML;
     const sanitizedInputHTML = inputHTML
         .replace(/&nbsp;/g, ' ')
@@ -258,12 +260,11 @@ class BaseMarkdown {
 
     console.log('Sanitized Input HTML:' + sanitizedInputHTML +';');
 
-    const blockMarkdown = marked(sanitizedInputHTML);
-    const sanitizedNewElement = this.__janitor.clean(blockMarkdown);
+    const sanitizedNewElement = this.parseMarkdownAndSanitize(sanitizedInputHTML);
 
     if (sanitizedNewElement.trim().length === 0) {
       console.warn('No new element created after sanitizing. Skipping parsing of block markdown');
-      return;
+      return null;
     }
 
     // Virtually create a new DOM with the newly parsed and sanitized markdown.
@@ -276,7 +277,7 @@ class BaseMarkdown {
 
     if (documentBody.length === 0 || documentBody[0].children.length === 0) {
       console.warn('The virtual DOM has an empty body. Skipping parsing of block markdown');
-      return;
+      return null;
     }
 
     // Obtain the first element child and create a new DOM element.
@@ -300,13 +301,15 @@ class BaseMarkdown {
     const newElement = document.createElement(elementTag);
     newElement.classList.add(...this._getElementClassesByTag(targetElement));
     // newElement.dataset.placeholder = 'Type something here';
-    newElement.contentEditable = 'true';
+
+    // A special condition if the nested's child is a horizontal line.
+    // Then set the contenteditable to false.
+    newElement.contentEditable = targetElement === 'HR' ? 'false' : 'true';
     newElement.addEventListener('focus', this._onBlockFocus);
+    newElement.addEventListener('keydown', this._onInputKeyDown);
+    newElement.addEventListener('keyup', this._onInputKeyUp);
 
     if (elementTag === 'UL' || elementTag ==='OL') {
-      newElement.addEventListener('keydown', this._onListItemKeyDown);
-      newElement.addEventListener('keyup', this._onListItemKeyUp);
-
       // The first inner item of the list.
       // It would be created when markdown is parsed.
       const listItem = newVirtualElementFromDocument!.firstElementChild!;
@@ -318,44 +321,39 @@ class BaseMarkdown {
     }
     else if (elementTag === 'PRE' || elementTag === 'BLOCKQUOTE') {
       newElement.innerHTML = newVirtualElementFromDocument!.innerHTML;
-      newElement.addEventListener('keydown', this._onPreCodeKeyDown);
-      newElement.addEventListener('keyup', this._onPreCodeKeyUp);
     }
     else {
       // TODO: Reassigning like this may cause performance issue.
       // May look into alternative of appending the child nodes directly.
       // Not sure if there would be any reference issue.
       newElement.innerHTML = newVirtualElementFromDocument!.innerHTML;
-
-      newElement.addEventListener('keydown', this._onKeyDown);
-      newElement.addEventListener('keyup', this._onBlockKeyUp);
     }
 
-    if (this.element.parentNode) {
-      this.element.parentNode!.replaceChild(newElement, this.element);
-    }
-    else {
-      console.warn('Element parent is not found. Is element rendered on screen? Or has it a parent wrapper?')
-    }
-    
-    this.element = newElement;
-    this._caret = new VanillaCaret(this.element);
+    const parserConfig = config || parser.blockConfig;
+    console.log('pc', parserConfig);
+    if (parserConfig.isInitiatingElement !== true) {
+      if (this.element.parentNode) {
+        this.element.parentNode!.replaceChild(newElement, this.element);
+      }
+      else {
+        console.warn('Element parent is not found. Is element rendered on screen? Or has it a parent wrapper?')
+      }
 
-    const parserConfig = config || blockConfig;
-    if (parserConfig.autoFocus === true) {
-      this.element.focus();
-      this._caret.setPos(this.element.textContent!.length);    
+      this.element = newElement;
+      this._caret = new VanillaCaret(this.element);
+
+      if (parserConfig.autoFocus === true) {
+        this.element.focus();
+        this._caret.setPos(newElement.textContent!.length);    
+      }
+
+      // Also include the new <hr> element and insert a new block in the editor.
+      if (nestedChildTagName === 'HR') {
+        this.insertAndFocusNewBlock();
+      }      
     }
 
-    // A special condition if the nested's child is a horizontal line.
-    // Then set the contenteditable to false.
-    // Also include the new <hr> element and insert a new block in the editor.
-    if (nestedChildTagName === 'HR') {
-      newElement.contentEditable = 'false';
-      newElement.innerHTML = newVirtualElementFromDocument!.innerHTML;
-
-      this.insertAndFocusNewBlock();
-    }
+    return newElement;
   }
 
   parseInlineMarkdown() {
@@ -372,6 +370,38 @@ class BaseMarkdown {
 
     targetElement.innerHTML = newElement;
     this.moveCursorToEnd(targetElement);
+  }
+
+  checkAndParseCodeBlockMarkdown(code: string, target: HTMLElement) {
+    if (code === KEY_CODE_ENTER && target instanceof HTMLElement) {
+      // TODO: Support syntax highlighting with language set:
+      // ```js
+      // ```py
+      if (target.textContent!.trim() === '```') {
+        // If only there's a cleaner way to prevent creation
+        // of a new block line.
+        // Markdown.setEnableLineBreaks(true);
+        // e.preventDefault();
+        // e.stopPropagation();
+
+        this.parseBlockMarkdown('```\n' + KEY_ZERO_WIDTH_SPACE +'\n```');
+
+        const currentBlockIndex = this.api.blocks.getCurrentBlockIndex();
+        this.api.blocks.delete(currentBlockIndex);
+
+        // Add a slight timeout to shift focus to the <pre> block.
+        setTimeout(() => {
+          this.focusOnBlock({ 
+            index: currentBlockIndex - 1, 
+            setCaretToInitialPosition: true
+          });
+        }, 50);
+
+        return true;
+      }
+    }
+
+    return false;
   }
 
   getActiveElement(): HTMLElement | null {
@@ -448,7 +478,6 @@ class BaseMarkdown {
     if (!targetElement) {
       return;
     }
-    
 
     if (sanitizedKeyCode === KEY_CODE_SPACE) {
       const { relative } = this.getAccurateCaretPos();
@@ -497,29 +526,6 @@ class BaseMarkdown {
     }
   }
 
-  moveCursorToEnd(el: HTMLElement) {
-    el.focus();
-
-    if (typeof window.getSelection != "undefined"
-            && typeof document.createRange != "undefined") {
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        range.collapse(false);
-
-        const sel = window.getSelection();
-        if (sel) {
-          sel.removeAllRanges();
-          sel.addRange(range);
-        }
-    } 
-    // else if (typeof document.body.createTextRange != "undefined") {
-    //     var textRange = document.body.createTextRange();
-    //     textRange.moveToElementText(el);
-    //     textRange.collapse(false);
-    //     textRange.select();
-    // }
-}
-
   /**
    * Draws the default view of the block container
    */
@@ -534,9 +540,10 @@ class BaseMarkdown {
     //div.dataset.placeholder = 'Write something here';
 
     div.addEventListener('focus', this._onBlockFocus);
-    div.addEventListener('keydown', this._onKeyDown);
-    div.addEventListener('keyup', this._onKeyUp);
+    div.addEventListener('keydown', this._onInputKeyDown);
+    div.addEventListener('keyup', this._onInputKeyUp);
 
+    this._blockType = MarkdownBlockTypes.Paragraph;
     this._caret = new VanillaCaret(div);
 
     return div;
@@ -551,8 +558,6 @@ class BaseMarkdown {
     //   newElement.innerHTML = originalData;
     // }
 
-    this._blockType = MarkdownBlockTypes.Paragraph;
-
     this.element.parentNode!.replaceChild(defaultBlockElement, this.element);
     this.element = defaultBlockElement;
 
@@ -560,46 +565,6 @@ class BaseMarkdown {
     setTimeout(() => {
       this.element.focus();
     }, 50);
-  }
-
-  insertAndFocusNewBlock() {
-    const currentBlockIndex = this.api.blocks.getCurrentBlockIndex();
-    const newBlockIndex = currentBlockIndex + 1;
-
-    // Call API to insert a new block.
-    this.api.blocks.insert(undefined, undefined, undefined, newBlockIndex, true);
-
-    this.focusOnBlock({ index: newBlockIndex });
-  }
-
-  focusOnBlock({index, setCaretToInitialPositon}: {index: number, setCaretToInitialPositon?: boolean}) {
-    // However, since the editable content is not directly at the new block,
-    // the editable content has to be obtained and set focus.
-    // Obtain the editable content by querying its property: contentEdtaible: true
-    const newBlock = this.api.blocks.getBlockByIndex(index);
-    
-    // const editableContentElement: any = newBlock.firstElementChild!.firstElementChild!
-    const editableContentElement: HTMLElement | null = newBlock.querySelector('[contentEditable="true"]');
-
-    if (editableContentElement) {
-      editableContentElement.focus();
-
-      if (setCaretToInitialPositon) {
-        const range = document.createRange();
-        range.setStart(editableContentElement, 0);
-        range.setEnd(editableContentElement, 0);
-
-        const selection = window.getSelection();
-        if (selection) {
-          selection.removeAllRanges();
-          selection.addRange(range);
-        }
-      }
-    }
-  }
-
-  removeNextBlock() {
-    this.api.blocks.delete(this.api.blocks.getCurrentBlockIndex() + 1);
   }
 
   shouldAddToPreviousList(sanitizedInputHTML: string) {
@@ -640,6 +605,14 @@ class BaseMarkdown {
     }
 
     return false;
+  }
+
+  onKeyDown(blockType: MarkdownBlockTypes, keyEvent: SanitizedInputKeyEvent) {
+
+  }
+
+  onKeyUp(blockType: MarkdownBlockTypes, keyEvent: SanitizedInputKeyEvent) {
+
   }
 
   _initView(): HTMLElement {
@@ -683,160 +656,45 @@ class BaseMarkdown {
     return newVirtualElementFromDocument as HTMLElement;
   }
 
+  /**
+   * When block is focused, the rule of line breaks will need to change accordingly.
+   * Not all block type should support line breaks event.
+   * 
+   * Line breaks event = Pressing enter and going to the next block of the Editor.
+   * 
+   * This event should be prevented for some block types such as lists, codes and quotes.
+   */
   _onBlockFocus() {
     const enableLineBreaks = rules.blockWithCustomLineBreaks.includes(this._blockType);
     BaseMarkdown.setEnableLineBreaks(enableLineBreaks);
   }
 
-  _onKeyDown(e: KeyboardEvent) {
-    const { code, target } = e;
-    const sanitizedKeyCode = sanitizeKeyCodeEvent(code);
+  _onInputKeyDown(e: KeyboardEvent) {
+    const { target, code, key } = e;
 
-    if (sanitizedKeyCode === KEY_CODE_ENTER && target instanceof HTMLElement) {
-      // TODO: Support syntax highlighting with language set:
-      // ```js
-      // ```py
-      if (target.textContent!.trim() === '```') {
-        // If only there's a cleaner way to prevent creation
-        // of a new block line.
-        // Markdown.setEnableLineBreaks(true);
-        // e.preventDefault();
-        // e.stopPropagation();
-
-        this.parseBlockMarkdown('```\n' + KEY_ZERO_WIDTH_SPACE +'\n```');
-
-        const currentBlockIndex = this.api.blocks.getCurrentBlockIndex();
-        this.api.blocks.delete(currentBlockIndex);
-
-        // Add a slight timeout to shift focus to the <pre> block.
-        setTimeout(() => {
-          this.focusOnBlock({ 
-            index: currentBlockIndex - 1, 
-            setCaretToInitialPositon: true
-          });
-        }, 50);
-
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-    }
-
-    this.toggleNeutralCallbacks(e);
-  }
-
-  _onKeyUp(e: KeyboardEvent) {
-    // This is working header validation.
-    if (this.checkAndParseBlockMarkdown(e)) {
-      return;
-    }
-
-    const { key: inputKey } = e;
-    const sanitizedKey = sanitizeInputKeyEvent(inputKey, this._onPressShiftKey);
-
-    if (this.checkAndClearMarkdown(sanitizedKey)) {
-      return;
-    }
-
-    this.checkAndParseInlineMarkdown(sanitizedKey);
-  }
-
-  _onBlockKeyUp(e: KeyboardEvent) {
-    const { key: inputKey } = e;
-    const sanitizedKey = sanitizeInputKeyEvent(inputKey, this._onPressShiftKey);
-
-    if (this.checkAndClearMarkdown(sanitizedKey)) {
-      return;
-    }
-
-    this.checkAndParseInlineMarkdown(sanitizedKey);
-  }
-
-  _onPreCodeKeyDown(e: KeyboardEvent) {
-    const { key: inputKey } = e;
-    const sanitizedKey = sanitizeInputKeyEvent(inputKey, this._onPressShiftKey);
-
-    if (sanitizedKey === KEY_CODE_ENTER && e.metaKey) {
-      this.insertAndFocusNewBlock();
-
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-
-    if (this._blockType === MarkdownBlockTypes.Quote) {
-      this.toggleNeutralCallbacks(e);
+    if (target instanceof HTMLElement) {
+      this.onKeyDown(this._blockType, {
+        event: e,
+        target,
+        code: sanitizeKeyCodeEvent(code),
+        key: sanitizeInputKeyEvent(key, this._onPressShiftKey)
+      })
     }
   }
 
-  _onPreCodeKeyUp(e: KeyboardEvent) {
-    const { key: inputKey, target } = e;
-    const sanitizedKey = sanitizeInputKeyEvent(inputKey, this._onPressShiftKey);
+  _onInputKeyUp(e: KeyboardEvent) {
+    const { target, code, key } = e;
 
-    if (this.checkAndParseInlineMarkdown(sanitizedKey)) {
-      return;
+    if (target instanceof HTMLElement) {
+      this.onKeyUp(this._blockType, {
+        event: e,
+        target,
+        code: sanitizeKeyCodeEvent(code),
+        key: sanitizeInputKeyEvent(key, this._onPressShiftKey)
+      })
     }
-
-    this.checkAndClearZeroWidthCharacter(target as HTMLElement);
   }
-
-  _onListItemKeyDown(e: KeyboardEvent) {
-    const { 
-      key: inputKey, 
-      target: listElement 
-    } = e;
-    const sanitizedKey = sanitizeInputKeyEvent(inputKey, this._onPressShiftKey);
-
-    if (
-      (sanitizedKey === KEY_CODE_ENTER || sanitizedKey === KEY_CODE_BACKSPACE) &&
-      listElement instanceof HTMLElement
-    ) {
-      const selectedListItemNode = this.getCurrentListItem();
-      if (selectedListItemNode) {
-        const lengthOfItems = listElement.children.length;
-        const index = this.getCurrentListItemIndex(listElement, selectedListItemNode);
-
-        const isLastItem = index === (lengthOfItems - 1);
-
-        const inputValue: string = selectedListItemNode.textContent!.trim();
-
-        // If empty text, then just remove this child and enter a new block.
-        if (inputValue.length === 0 && isLastItem) {
-          listElement.removeChild(selectedListItemNode);
-
-          // If the list already has more than 1 items, proceed to 
-          // go to the next line.
-          // If not, just remove the entire list object and revert
-          // to the original div content.
-          if (lengthOfItems > 1) {
-            this.insertAndFocusNewBlock();
-
-            e.preventDefault();
-            e.stopPropagation();
-            return;
-          }
-        }
-      }
-    }
-
-    this.toggleNeutralCallbacks(e);
-  }
-
-  _onListItemKeyUp(e: KeyboardEvent) {
-    const { key: inputKey } = e;
-    const sanitizedKey = sanitizeInputKeyEvent(inputKey, this._onPressShiftKey);
-
-    // if (this.checkAndClearMarkdown(sanitizedKey)) {
-    //   return;
-    // }
-
-    if (this.checkAndParseInlineMarkdown(sanitizedKey)) {
-      return;
-    }
-
-    this.checkAndClearZeroWidthCharacter(e.target as HTMLElement);
-  }
-
+  
   /**
    * 
    * @param keyCode {string}
@@ -874,7 +732,6 @@ class BaseMarkdown {
   } 
 
   _setBlockElementTypeByTag(tag: string) {
-    console.log('set block elemetn by tag:' + tag);
     switch (tag) {
       case 'H1':
       case 'H2':
@@ -914,18 +771,34 @@ class BaseMarkdown {
   /**
    * Initialize default configurations.
    */
-  __setDefaultConfigurations() {
-    marked.use({ tokenizer, renderer });
+  private __setDefaultConfigurations() {
+    marked.use({ tokenizer: markedConfig.tokenizer, renderer: markedConfig.renderer });
 
-    this.__janitor = new HTMLJanitor(sanitizerConfig)
+    this.__janitor = new HTMLJanitor(sanitizer.sanitizerConfig)
   }
 
   /**
    * Initialize the default parameters set to the class properties.
    */
-  __setDefaultParameters() {
+  private __setDefaultParameters() {
     this._blockType = MarkdownBlockTypes.Paragraph;
     this._onPressShiftKey = false;
+  }
+  
+  /**
+   * Helps to dispatch a custom event that the window/document
+   * can subscribe to.
+   * 
+   * This event will be called whenever a `keydown` is started.
+   * 
+   * @param e {KeyboardEvent}
+   */
+  __onDispatchMasterEvent(e: KeyboardEvent) {
+    if (e.target as HTMLElement) {
+      e.target?.dispatchEvent(
+        new Event('myevent', { bubbles: true })
+      );
+    }
   }
 
 }

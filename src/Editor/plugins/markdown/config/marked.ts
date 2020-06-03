@@ -31,7 +31,7 @@ function theEscape(html: string, encode: boolean) {
   return html;
 }
 
-export const renderer: any = {
+const renderer: any = {
   code(code: string, infostring: string | undefined, escaped: boolean) {
     const matcher = (infostring || '').match(/\S*/);
     if (matcher) {
@@ -73,7 +73,7 @@ export const renderer: any = {
   }
 }
 
-export const tokenizer: Tokenizer = {
+const tokenizer: Tokenizer = {
   strong(src: string) {
     const rules = /^__([^\s_])__(?!_)|^\*\*([^\s*])\*\*(?!\*)|^__([\s\S]*?)__(?!_)|^\*\*([\s\S]*?)\*\*(?!\*)/;
     const cap = rules.exec(src);
@@ -126,3 +126,8 @@ export const tokenizer: Tokenizer = {
     }
   }
 };
+
+export default {
+  renderer,
+  tokenizer
+}
