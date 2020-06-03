@@ -648,10 +648,15 @@ class BaseMarkdown extends BaseBlockHelper {
     }
 
     // Obtain the first element child and create a new DOM element.
-    const newVirtualElementFromDocument = documentBody[0].firstElementChild;
+    const newVirtualElementFromDocument = documentBody[0].firstElementChild as HTMLElement;
     if (!newVirtualElementFromDocument) {
       return this.drawDefaultView();
     }
+    
+    newVirtualElementFromDocument.addEventListener('focus', this._onBlockFocus);
+    newVirtualElementFromDocument.addEventListener('keydown', this._onInputKeyDown);
+    newVirtualElementFromDocument.addEventListener('keyup', this._onInputKeyUp);
+    this._caret = new VanillaCaret(newVirtualElementFromDocument);
     
     return newVirtualElementFromDocument as HTMLElement;
   }
