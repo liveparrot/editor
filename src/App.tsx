@@ -19,11 +19,21 @@ function App() {
 
   return (
     <div>
-      <div>
-        <Editor instanceRef={editor} />
+      <div 
+        className="ce-block__content"
+        style={{ 
+          display: 'flex',
+          flexDirection: 'row',
+          marginTop: '1.5rem', 
+          marginBottom: '1.2rem' ,
+          alignItems: 'center',
+          justifyContent: 'flex-end'
+        }}
+      >
+        <input type="button" onClick={onSaveClick} value="Save" />
       </div>
       <div>
-        <input type="button" onClick={onSaveClick} value="Save" />
+        <Editor instanceRef={editor} />
       </div>
     </div>
     // <div className="App">
