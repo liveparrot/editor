@@ -13,7 +13,9 @@ import {
   KEY_CODE_BACKSPACE,
   sanitizeKeyCodeEvent,
   sanitizeInputKeyEvent,
-  KEY_CODE_ENTER
+  KEY_CODE_ENTER,
+  KEY_TAB_SPACE,
+  KEY_CODE_TAB
 } from '../keys';
 import classes from '../classes';
 
@@ -372,7 +374,7 @@ class BaseMarkdown extends BaseBlockHelper {
     this.moveCursorToEnd(targetElement);
   }
 
-  checkAndParseCodeBlockMarkdown(code: string, target: HTMLElement) {
+  checkAndParseCodeBlockMarkdown(code: string, target: HTMLElement, event: KeyboardEvent) {
     if (code === KEY_CODE_ENTER && target instanceof HTMLElement) {
       // TODO: Support syntax highlighting with language set:
       // ```js
@@ -380,22 +382,131 @@ class BaseMarkdown extends BaseBlockHelper {
       if (target.textContent!.trim() === '```') {
         // If only there's a cleaner way to prevent creation
         // of a new block line.
-        // Markdown.setEnableLineBreaks(true);
-        // e.preventDefault();
-        // e.stopPropagation();
+        event.preventDefault();
+        event.stopPropagation();
 
         this.parseBlockMarkdown('```\n' + KEY_ZERO_WIDTH_SPACE +'\n```');
 
-        const currentBlockIndex = this.api.blocks.getCurrentBlockIndex();
-        this.api.blocks.delete(currentBlockIndex);
+        // const currentBlockIndex = this.api.blocks.getCurrentBlockIndex();
+        // this.api.blocks.delete(currentBlockIndex);
 
         // Add a slight timeout to shift focus to the <pre> block.
-        setTimeout(() => {
-          this.focusOnBlock({ 
-            index: currentBlockIndex - 1, 
-            setCaretToInitialPosition: true
-          });
-        }, 50);
+        // setTimeout(() => {
+        //   this.focusOnBlock({ 
+        //     index: currentBlockIndex - 1, 
+        //     setCaretToInitialPosition: true
+        //   });
+        // }, 50);
+
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  checkAndDeleteTabs(key: string): boolean {
+    if (key === KEY_CODE_BACKSPACE) {
+      const codeBlock = this.getActiveElement();
+
+      if (codeBlock) {
+        const { absolute, relative: caretPos } = this.getAccurateCaretPos();
+        const splitText = codeBlock.innerText.substring(0, caretPos);
+        const tabEndingMatcher = splitText.match(rules.endsWithTabs);
+
+        if (tabEndingMatcher) {
+          const ends = codeBlock.innerText.substring(caretPos, codeBlock.innerText.length);
+          const newTrimmedContent = `${tabEndingMatcher[1]}${ends}`;
+          codeBlock.innerText = newTrimmedContent;
+
+          this._caret.setPos(absolute - KEY_TAB_SPACE.length);
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  checkAndInsertTab(key: string): boolean {
+    if (key === KEY_CODE_TAB) {
+      const codeBlock = this.getActiveElement();
+      if (codeBlock) {
+        const { absolute, relative: caretPos } = this.getAccurateCaretPos();
+
+        const content = codeBlock.textContent!;
+        const tabbedContent = content.insert(caretPos, `${KEY_TAB_SPACE}`);
+        codeBlock.innerHTML = tabbedContent;
+
+        this._caret.setPos(absolute + KEY_TAB_SPACE.length);
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  checkAndInsertNewCodeRow(key: string): boolean {
+    if (key === KEY_CODE_ENTER) {
+      const codeBlock = this.getActiveElement();
+
+      if (codeBlock && codeBlock.parentElement) {
+        const { absolute, relative: caretPos } = this.getAccurateCaretPos();
+        const codeBlockWrapper = codeBlock.parentElement;
+        const content = codeBlock.textContent!;
+
+        const index = this.getCurrentListItemIndex(codeBlockWrapper, codeBlock);        
+        let indexToInsert = index + 1;
+
+        if (caretPos === 0) {
+          indexToInsert -= 1;
+        }
+
+        const splittedText = content.substring(caretPos, content.length)!;
+        
+        if (splittedText.length > 0 && caretPos > 0) {
+          const originalSplittedText = content.substring(0, caretPos);
+          codeBlock.innerText = originalSplittedText!;
+        }
+
+        const newCodeBlock = document.createElement('DIV');
+        newCodeBlock.classList.add('code-edit');
+
+        // Get pre content text.
+        // This helps with tabbed content.
+        let preContentText = '';
+        const startWithTabsMatcher = content.match(rules.startWithTabs);
+        if (startWithTabsMatcher) {
+          const preContentTabs = startWithTabsMatcher[1];
+          preContentText = preContentTabs;
+        }
+
+        let newContent = `${preContentText}`;
+        if (caretPos === 0 || splittedText.length === 0) {
+          newContent = `${newContent}${KEY_ZERO_WIDTH_SPACE}`
+        }
+        else {
+          newContent = `${newContent}${splittedText}`
+        }
+
+        newCodeBlock.innerHTML = newContent;
+
+        if (indexToInsert >= codeBlockWrapper.childElementCount) {
+          codeBlockWrapper.appendChild(newCodeBlock);
+        }
+        else {
+          codeBlockWrapper.insertBefore(newCodeBlock, codeBlockWrapper.children[indexToInsert]);
+        }
+
+        if (caretPos === 0) {
+          this.moveCursorToStart(codeBlock);
+        } else if (splittedText.length === 0) {
+          this.moveCursorToEnd(newCodeBlock);
+        } else if (preContentText.length > 0) {
+          this._caret.setPos(absolute + preContentText.length)
+        } else {
+          this.moveCursorToStart(newCodeBlock);
+        }
 
         return true;
       }
@@ -408,6 +519,9 @@ class BaseMarkdown extends BaseBlockHelper {
     if (this._blockType === MarkdownBlockTypes.OrderedList || 
       this._blockType === MarkdownBlockTypes.UnorderedList) {
       return this.getCurrentListItem();
+    }
+    else if (this._blockType === MarkdownBlockTypes.Code) {
+      return (this.getCurrentListItem('code-edit'));
     }
     else if (this._blockType === MarkdownBlockTypes.Quote) {
       return this.getCurrentListItem('ce-paragraph');
@@ -441,9 +555,11 @@ class BaseMarkdown extends BaseBlockHelper {
     };
 
     if (this._blockType === MarkdownBlockTypes.OrderedList || 
-      this._blockType === MarkdownBlockTypes.UnorderedList) {
+      this._blockType === MarkdownBlockTypes.UnorderedList ||
+      this._blockType === MarkdownBlockTypes.Code) {
+      const childClass = MarkdownBlockTypes.Code ? 'code-edit' : 'cdx-list__item';
 
-      const activeElement = this.getCurrentListItem();
+      const activeElement = this.getCurrentListItem(childClass);
       if (!activeElement) {
         return defaultCaretPos;
       }
@@ -572,7 +688,7 @@ class BaseMarkdown extends BaseBlockHelper {
 
     if (currentBlockIndex > 0) {
       const previousBlock = this.api.blocks.getBlockByIndex(currentBlockIndex - 1);
-      const editableContentElement: HTMLElement | null = previousBlock.querySelector('[contentEditable="true"]');
+      const editableContentElement: HTMLElement | null = previousBlock.holder.querySelector('[contentEditable="true"]');
 
       if (editableContentElement && (editableContentElement.tagName === 'UL' || editableContentElement.tagName === 'OL')) {
 

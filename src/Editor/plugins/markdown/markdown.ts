@@ -1,8 +1,9 @@
 import VanillaCaret from 'vanilla-caret-js';
-
+import './ext-string';
 import BaseMarkdown from "./base/markdown";
 import { SanitizedInputKeyEvent, MarkdownBlockTypes } from './types';
-import { KEY_CODE_ENTER, KEY_CODE_BACKSPACE } from "./keys";
+import { KEY_ZERO_WIDTH_SPACE, KEY_CODE_ENTER, KEY_CODE_BACKSPACE, KEY_TAB_SPACE, KEY_CODE_TAB } from "./keys";
+import { rules } from './config';
 
 class Markdown extends BaseMarkdown {
   
@@ -70,7 +71,7 @@ class Markdown extends BaseMarkdown {
   onParagraphKeyDown(keyEvent: SanitizedInputKeyEvent) {
     const { event, target, code } = keyEvent;
 
-    const isParsedCodeBlock = this.checkAndParseCodeBlockMarkdown(code, target);
+    const isParsedCodeBlock = this.checkAndParseCodeBlockMarkdown(code, target, event);
     if (isParsedCodeBlock) {
       event.preventDefault();
       event.stopPropagation();
@@ -112,6 +113,26 @@ class Markdown extends BaseMarkdown {
 
   onListKeyDown(keyEvent: SanitizedInputKeyEvent) {
     const { event, key, target: listElement } = keyEvent;
+
+    // if (key === KEY_CODE_TAB) {
+    //   const selectedListItemNode = this.getCurrentListItem();
+
+    //   const newListNode = document.createElement('UL');
+    //   newListNode.classList.add(...this._getElementClassesByTag('UL'));
+
+    //   const newListItemNode = document.createElement('LI');
+    //   newListItemNode.classList.add(...this._getElementClassesByTag('LI'));
+    //   newListItemNode.innerHTML = selectedListItemNode!.innerHTML;
+
+    //   newListNode.appendChild(newListItemNode);
+
+    //   selectedListItemNode?.parentElement!.replaceChild(newListNode, selectedListItemNode!);
+
+
+    //   event.preventDefault();
+    //   event.stopPropagation();
+    //   return;
+    // }
 
     if (key === KEY_CODE_ENTER || key === KEY_CODE_BACKSPACE) {
       const selectedListItemNode = this.getCurrentListItem();
@@ -158,8 +179,22 @@ class Markdown extends BaseMarkdown {
   onCodeKeyDown(keyEvent: SanitizedInputKeyEvent) {
     const { key, event } = keyEvent;
 
-    if (key === KEY_CODE_ENTER && event.metaKey) {
-      this.insertAndFocusNewBlock();
+    if (this.checkAndDeleteTabs(key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (this.checkAndInsertTab(key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (key === KEY_CODE_ENTER) {
+      if (event.metaKey) {
+        this.insertAndFocusNewBlock();
+      }
 
       event.preventDefault();
       event.stopPropagation();
@@ -170,11 +205,12 @@ class Markdown extends BaseMarkdown {
   onCodeKeyUp(keyEvent: SanitizedInputKeyEvent) {
     const { key, target } = keyEvent;
 
-    if (this.checkAndParseInlineMarkdown(key)) {
+    if (this.checkAndInsertNewCodeRow(key)) {
       return;
     }
 
-    this.checkAndClearZeroWidthCharacter(target);
+    // Try to only clear the zero width character at the specific row.
+    this.checkAndClearZeroWidthCharacter(this.getActiveElement() || target);
   }
 
   onQuoteKeyDown(keyEvent: SanitizedInputKeyEvent) {

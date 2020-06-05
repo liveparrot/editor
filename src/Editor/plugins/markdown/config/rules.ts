@@ -18,6 +18,9 @@ const endTag = /<\/[a-z][\s\S]*>$/;
 
 const zeroWidthCharacter = /\u200B/g;
 
+const startWithTabs = /^(\s+)(.*)/;
+const endsWithTabs= /(.*)(\s{4}$)/;
+
 const blockWithCustomLineBreaks: MarkdownBlockTypes[] = [
   MarkdownBlockTypes.OrderedList,
   MarkdownBlockTypes.UnorderedList,
@@ -33,5 +36,7 @@ export default {
   endTag,
   zeroWidthCharacter,
   blockWithCustomLineBreaks,
-  orderedListDelimeter
+  orderedListDelimeter,
+  startWithTabs,
+  endsWithTabs
 }

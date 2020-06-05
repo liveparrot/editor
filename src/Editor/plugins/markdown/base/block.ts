@@ -16,6 +16,29 @@ class BaseBlockHelper {
     this.api = api;
   }
 
+  moveCursorToStart(el: HTMLElement) {
+    el.focus();
+
+    if (typeof window.getSelection != "undefined"
+            && typeof document.createRange != "undefined") {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(true);
+
+        const sel = window.getSelection();
+        if (sel) {
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+    } 
+    // else if (typeof document.body.createTextRange != "undefined") {
+    //     var textRange = document.body.createTextRange();
+    //     textRange.moveToElementText(el);
+    //     textRange.collapse(false);
+    //     textRange.select();
+    // }
+  }
+
   moveCursorToEnd(el: HTMLElement) {
     el.focus();
 
@@ -56,7 +79,7 @@ class BaseBlockHelper {
     const newBlock = this.api.blocks.getBlockByIndex(index);
 
     // const editableContentElement: any = newBlock.firstElementChild!.firstElementChild!
-    const editableContentElement: HTMLElement | null = newBlock.querySelector('[contentEditable="true"]');
+    const editableContentElement: HTMLElement | null = newBlock.holder.querySelector('[contentEditable="true"]');
 
     if (editableContentElement) {
       editableContentElement.focus();
