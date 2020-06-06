@@ -39,6 +39,7 @@ const Editor = (props: any) => {
       instanceRef={instance => {instanceRef.current = instance}} 
       tools={tools} 
       data={data}
+      minHeight={100}
       enableReInitialize
       autofocus
       // data={{
