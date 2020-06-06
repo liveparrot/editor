@@ -2,8 +2,7 @@ import VanillaCaret from 'vanilla-caret-js';
 import './ext-string';
 import BaseMarkdown from "./base/markdown";
 import { SanitizedInputKeyEvent, MarkdownBlockTypes } from './types';
-import { KEY_ZERO_WIDTH_SPACE, KEY_CODE_ENTER, KEY_CODE_BACKSPACE, KEY_TAB_SPACE, KEY_CODE_TAB } from "./keys";
-import { rules } from './config';
+import { KEY_CODE_ENTER, KEY_CODE_BACKSPACE } from "./keys";
 
 class Markdown extends BaseMarkdown {
   
@@ -64,14 +63,10 @@ class Markdown extends BaseMarkdown {
     };
   };
 
-  drawDefaultView(): HTMLElement {
-    return this.drawParagraph();
-  }
-
   onParagraphKeyDown(keyEvent: SanitizedInputKeyEvent) {
     const { event, target, code } = keyEvent;
 
-    const isParsedCodeBlock = this.checkAndParseCodeBlockMarkdown(code, target, event);
+    const isParsedCodeBlock = this.checkAndParseCodeBlockMarkdown(code, target);
     if (isParsedCodeBlock) {
       event.preventDefault();
       event.stopPropagation();
@@ -97,22 +92,30 @@ class Markdown extends BaseMarkdown {
   }
 
   onHeaderKeyDown(keyEvent: SanitizedInputKeyEvent) {
-    const { event } = keyEvent;
+    const { key, event } = keyEvent;
+
+    if (this.checkAndClearMarkdown(key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     this.toggleNeutralCallbacks(event);
   }
 
   onHeaderKeyUp(keyEvent: SanitizedInputKeyEvent) {
     const { key } = keyEvent;
-
-    if (this.checkAndClearMarkdown(key)) {
-      return;
-    }
-
     this.checkAndParseInlineMarkdown(key);
   }
 
   onListKeyDown(keyEvent: SanitizedInputKeyEvent) {
     const { event, key, target: listElement } = keyEvent;
+
+    if (this.checkAndClearMarkdown(key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
 
     // if (key === KEY_CODE_TAB) {
     //   const selectedListItemNode = this.getCurrentListItem();
@@ -134,7 +137,9 @@ class Markdown extends BaseMarkdown {
     //   return;
     // }
 
-    if (key === KEY_CODE_ENTER || key === KEY_CODE_BACKSPACE) {
+    // Note: To mimic the Gitbook typing UX of lists, you should add
+    // checking of backspace key here!
+    if (key === KEY_CODE_ENTER) {
       const selectedListItemNode = this.getCurrentListItem();
       if (selectedListItemNode) {
         const lengthOfItems = listElement.children.length;
@@ -179,6 +184,12 @@ class Markdown extends BaseMarkdown {
   onCodeKeyDown(keyEvent: SanitizedInputKeyEvent) {
     const { key, event } = keyEvent;
 
+    if (this.checkAndClearMarkdown(key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     if (this.checkAndDeleteTabs(key)) {
       event.preventDefault();
       event.stopPropagation();
@@ -191,11 +202,14 @@ class Markdown extends BaseMarkdown {
       return;
     }
 
-    if (key === KEY_CODE_ENTER) {
-      if (event.metaKey) {
-        this.insertAndFocusNewBlock();
-      }
+    if (key === KEY_CODE_ENTER && event.metaKey) {
+      this.insertAndFocusNewBlock();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
 
+    if (this.checkAndInsertNewCodeRow(key)) {
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -203,11 +217,7 @@ class Markdown extends BaseMarkdown {
   }
 
   onCodeKeyUp(keyEvent: SanitizedInputKeyEvent) {
-    const { key, target } = keyEvent;
-
-    if (this.checkAndInsertNewCodeRow(key)) {
-      return;
-    }
+    const { target } = keyEvent;
 
     // Try to only clear the zero width character at the specific row.
     this.checkAndClearZeroWidthCharacter(this.getActiveElement() || target);
@@ -215,6 +225,12 @@ class Markdown extends BaseMarkdown {
 
   onQuoteKeyDown(keyEvent: SanitizedInputKeyEvent) {
     const { key, event } = keyEvent;
+
+    if (this.checkAndClearMarkdown(key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
 
     if (key === KEY_CODE_ENTER && event.metaKey) {
       this.insertAndFocusNewBlock();
@@ -234,43 +250,7 @@ class Markdown extends BaseMarkdown {
       return;
     }
 
-    this.checkAndClearZeroWidthCharacter(target);
-  }
-
-  drawParagraph(): HTMLElement {
-    console.log('Yo!');
-    console.log(this.marked('# '));
-
-    const tag = 'DIV';
-    const div = document.createElement(tag);
-
-    const divClasses = this._getElementClassesByTag(tag);
-
-    div.classList.add(...divClasses, this.api.styles.block);
-    div.contentEditable = 'true';
-    //div.dataset.placeholder = 'Write something here';
-
-    div.addEventListener('focus', this._onBlockFocus);
-    div.addEventListener('keydown', this._onInputKeyDown);
-    div.addEventListener('keyup', this._onInputKeyUp);
-
-    this._blockType = MarkdownBlockTypes.Paragraph;
-    this._caret = new VanillaCaret(div);
-
-    return div;
-  }
-
-  drawHeader(): HTMLElement {
-    const headerElement =  this.parseBlockMarkdown('# ', {
-      isInitiatingElement: true
-    });
-
-    if (!headerElement) {
-      return this.drawParagraph();
-    }
-
-    this._onBlockFocus();
-    return headerElement;
+    this.checkAndClearZeroWidthCharacter(this.getActiveElement() || target);
   }
 
 }

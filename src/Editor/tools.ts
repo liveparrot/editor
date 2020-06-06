@@ -1,4 +1,4 @@
-import { Markdown, Header } from './plugins/markdown';
+import { Markdown, Header, List, Code, Quote, Breakline } from './plugins/markdown';
 
 // import Paragraph from '@editorjs/paragraph';
 // import Header from '@editorjs/header';
@@ -19,6 +19,10 @@ const plugins: any = {
     inlineToolbar: true
   },
   header: Header,
+  list: List,
+  code: Code,
+  quote: Quote,
+  breakline: Breakline,
   image: { 
     class: ImageTool,
     config: {

@@ -1,4 +1,5 @@
 import Markdown from "./markdown";
+import { MarkdownBlockTypes } from "./types";
 
 class Header extends Markdown {
 
@@ -9,8 +10,8 @@ class Header extends Markdown {
     }
   }
 
-  drawDefaultView(): HTMLElement {
-    return this.drawHeader();
+  setDefaultMarkdownBlockType(): MarkdownBlockTypes {
+    return MarkdownBlockTypes.Header;
   }
 
 }

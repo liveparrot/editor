@@ -105,6 +105,10 @@ class BaseMarkdown extends BaseBlockHelper {
     }
   }
 
+  setDefaultMarkdownBlockType(): MarkdownBlockTypes {
+    return MarkdownBlockTypes.Paragraph;
+  }
+
   /**
    * Performs some validation rules of whether should parse to a block markdown.
    * @param e {KeyboardEvent}
@@ -202,15 +206,36 @@ class BaseMarkdown extends BaseBlockHelper {
   checkAndClearMarkdown(keyCode: string): boolean {
     const targetElement = this.getActiveElement();
     if (!targetElement) {
+      console.warn('Target element not found');
       return false;
     }
 
     // TODO: To support `delete` button as well?
     if (keyCode === KEY_CODE_BACKSPACE) {
-      const textContent = targetElement.textContent!;
+      let isSingleChild = false;
+      let textContent = targetElement.textContent!;
 
+      if (
+        this._blockType === MarkdownBlockTypes.Quote ||
+        this._blockType === MarkdownBlockTypes.UnorderedList ||
+        this._blockType === MarkdownBlockTypes.OrderedList ||
+        this._blockType === MarkdownBlockTypes.Code
+      ) {
+        const blockQuote = targetElement.parentElement!
+        isSingleChild = blockQuote.childElementCount === 1;
+
+        textContent = textContent.replace(rules.zeroWidthCharacter, '');
+      }
+      else if (
+        this._blockType === MarkdownBlockTypes.Paragraph ||
+        this._blockType === MarkdownBlockTypes.Header
+      ) {
+        isSingleChild = true;
+      }
+
+      const hasContent = /.+/g.test(textContent);
       // Reset element if no texts.
-      if (textContent.length === 0) {
+      if (hasContent === false && isSingleChild) {
         this.resetBlockElement();
         return true;
       }
@@ -321,9 +346,6 @@ class BaseMarkdown extends BaseBlockHelper {
       listItemElement.innerHTML = listItem.innerHTML;
       newElement.appendChild(listItemElement);
     }
-    else if (elementTag === 'PRE' || elementTag === 'BLOCKQUOTE') {
-      newElement.innerHTML = newVirtualElementFromDocument!.innerHTML;
-    }
     else {
       // TODO: Reassigning like this may cause performance issue.
       // May look into alternative of appending the child nodes directly.
@@ -332,7 +354,6 @@ class BaseMarkdown extends BaseBlockHelper {
     }
 
     const parserConfig = config || parser.blockConfig;
-    console.log('pc', parserConfig);
     if (parserConfig.isInitiatingElement !== true) {
       if (this.element.parentNode) {
         this.element.parentNode!.replaceChild(newElement, this.element);
@@ -374,30 +395,13 @@ class BaseMarkdown extends BaseBlockHelper {
     this.moveCursorToEnd(targetElement);
   }
 
-  checkAndParseCodeBlockMarkdown(code: string, target: HTMLElement, event: KeyboardEvent) {
+  checkAndParseCodeBlockMarkdown(code: string, target: HTMLElement) {
     if (code === KEY_CODE_ENTER && target instanceof HTMLElement) {
       // TODO: Support syntax highlighting with language set:
       // ```js
       // ```py
       if (target.textContent!.trim() === '```') {
-        // If only there's a cleaner way to prevent creation
-        // of a new block line.
-        event.preventDefault();
-        event.stopPropagation();
-
         this.parseBlockMarkdown('```\n' + KEY_ZERO_WIDTH_SPACE +'\n```');
-
-        // const currentBlockIndex = this.api.blocks.getCurrentBlockIndex();
-        // this.api.blocks.delete(currentBlockIndex);
-
-        // Add a slight timeout to shift focus to the <pre> block.
-        // setTimeout(() => {
-        //   this.focusOnBlock({ 
-        //     index: currentBlockIndex - 1, 
-        //     setCaretToInitialPosition: true
-        //   });
-        // }, 50);
-
         return true;
       }
     }
@@ -618,17 +622,6 @@ class BaseMarkdown extends BaseBlockHelper {
         }
       }
     }
-    else if (sanitizedKeyCode === KEY_CODE_ENTER && this._blockType === MarkdownBlockTypes.Quote) {
-      const element = this.getActiveElement();
-
-      // Apply a `cheating` zero width key at the end of the active element (row),
-      // then move the cursor to the end.
-      // Upon `keyup` event, the "enter" or new line will be added after the div without
-      // copying the current inline formatting.
-      element!.innerHTML = `${element!.innerHTML}${KEY_ZERO_WIDTH_SPACE}`;
-      this.moveCursorToEnd(element!);
-      return;
-    }
     
     this.toggleShiftKey(e);
   }
@@ -646,26 +639,38 @@ class BaseMarkdown extends BaseBlockHelper {
    * Draws the default view of the block container
    */
   drawDefaultView(): HTMLElement {
-    const tag = 'DIV';
-    const div = document.createElement(tag);
+    let view: HTMLElement | null = null;
+    
+    if (this._blockType === MarkdownBlockTypes.Header) {
+      view = this._drawHeader();
+    }
+    else if (this._blockType === MarkdownBlockTypes.UnorderedList) {
+      view = this._drawUnorderedList();
+    }
+    else if (this._blockType === MarkdownBlockTypes.Code) {
+      view = this._drawCodeBlock();
+    }
+    else if (this._blockType === MarkdownBlockTypes.Quote) {
+      view = this._drawQuote();
+    }
+    else if (this._blockType === MarkdownBlockTypes.Breakline) {
+      view = this._drawBreakline();
+    }
 
-    const divClasses = this._getElementClassesByTag(tag);
+    if (!view) {
+      view = this._drawParagraph();
+    }
 
-    div.classList.add(...divClasses, this.api.styles.block);
-    div.contentEditable = 'true';
-    //div.dataset.placeholder = 'Write something here';
+    this._caret = new VanillaCaret(view);
 
-    div.addEventListener('focus', this._onBlockFocus);
-    div.addEventListener('keydown', this._onInputKeyDown);
-    div.addEventListener('keyup', this._onInputKeyUp);
+    // Auto focus on block.
+    this._onBlockFocus();
 
-    this._blockType = MarkdownBlockTypes.Paragraph;
-    this._caret = new VanillaCaret(div);
-
-    return div;
+    return view;
   }
 
   resetBlockElement() {
+    this._blockType = MarkdownBlockTypes.Paragraph;
     const defaultBlockElement = this.drawDefaultView();
 
     // TODO: Consider if want to reassign previous data.
@@ -889,6 +894,56 @@ class BaseMarkdown extends BaseBlockHelper {
     }
   }
 
+  private _drawParagraph(): HTMLElement {
+    const tag = 'DIV';
+    const div = document.createElement(tag);
+
+    const divClasses = this._getElementClassesByTag(tag);
+
+    div.classList.add(...divClasses, this.api.styles.block);
+    div.contentEditable = 'true';
+    //div.dataset.placeholder = 'Write something here';
+
+    div.addEventListener('focus', this._onBlockFocus);
+    div.addEventListener('keydown', this._onInputKeyDown);
+    div.addEventListener('keyup', this._onInputKeyUp);
+
+    this._blockType = MarkdownBlockTypes.Paragraph;
+    // this._caret = new VanillaCaret(div);
+
+    return div;
+  }
+
+  private _drawHeader(): HTMLElement | null {
+    return this.parseBlockMarkdown('# ', {
+      isInitiatingElement: true
+    });
+  }
+
+  private _drawUnorderedList() : HTMLElement | null {
+    return this.parseBlockMarkdown(`- ${KEY_ZERO_WIDTH_SPACE}`, {
+      isInitiatingElement: true
+    });
+  }
+
+  private _drawCodeBlock(): HTMLElement | null {
+    return this.parseBlockMarkdown('```\n' + KEY_ZERO_WIDTH_SPACE +'\n```', {
+      isInitiatingElement: true
+    });
+  }
+
+  private _drawQuote(): HTMLElement | null {
+    return this.parseBlockMarkdown(`> ${KEY_ZERO_WIDTH_SPACE}`, {
+      isInitiatingElement: true
+    });
+  }
+
+  private _drawBreakline(): HTMLElement | null {
+    return this.parseBlockMarkdown(`---`, {
+      isInitiatingElement: true
+    });
+  }
+
   /**
    * Initialize default configurations.
    */
@@ -902,7 +957,8 @@ class BaseMarkdown extends BaseBlockHelper {
    * Initialize the default parameters set to the class properties.
    */
   private __setDefaultParameters() {
-    this._blockType = MarkdownBlockTypes.Paragraph;
+    // this._blockType = MarkdownBlockTypes.Paragraph;
+    this._blockType = this.setDefaultMarkdownBlockType();
     this._onPressShiftKey = false;
   }
   
