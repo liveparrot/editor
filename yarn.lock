@@ -1043,9 +1043,10 @@
   resolved "https://registry.yarnpkg.com/@editorjs/code/-/code-2.4.1.tgz#a1851c781c9ead9a84bd921f04df172a2383f550"
   integrity sha512-R4UUApkm6FLuxrQoqISg6GL73t0WWOdoPdAmAa36xarmtmBRkxu4AfxIwzW2CtUD1CqG1T7Be6jnv4ZeUoMNYQ==
 
-"@editorjs/editorjs@http://github.com/barryloh/editor.js.git#a1c4efad355738dfd24aaf7a98eefa9faf019c78":
+"@editorjs/editorjs@https://github.com/barryloh/editor.js.git#a1c4efad355738dfd24aaf7a98eefa9faf019c78":
   version "2.18.0"
-  resolved "http://github.com/barryloh/editor.js.git#a1c4efad355738dfd24aaf7a98eefa9faf019c78"
+  uid a1c4efad355738dfd24aaf7a98eefa9faf019c78
+  resolved "https://github.com/barryloh/editor.js.git#a1c4efad355738dfd24aaf7a98eefa9faf019c78"
   dependencies:
     codex-notifier "^1.1.2"
     codex-tooltip "^1.0.1"
@@ -3876,10 +3877,10 @@ domhandler@^2.3.0:
   dependencies:
     domelementtype "1"
 
-dompurify@^2.0.10:
-  version "2.0.10"
-  resolved "https://registry.yarnpkg.com/dompurify/-/dompurify-2.0.10.tgz#d193f36d8148b4297a3a420b992d20eeff47a4d3"
-  integrity sha512-ok1dcSztsIuVxWG6Cx0ujyDIzNclz9W9OIU0cOb0IT+VAtSLrOelZF4miUvSm1U4PoCw8D7sIOLCnCQOaVpr3w==
+dompurify@^2.0.17:
+  version "2.0.17"
+  resolved "https://registry.yarnpkg.com/dompurify/-/dompurify-2.0.17.tgz#505ffa126a580603df4007e034bdc9b6b738668e"
+  integrity sha512-nNwwJfW55r8akD8MSFz6k75bzyT2y6JEa1O3JrZFBf+Y5R9JXXU4OsRl0B9hKoPgHTw2b7ER5yJ5Md97MMUJPg==
 
 domutils@1.5.1:
   version "1.5.1"
