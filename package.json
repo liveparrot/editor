@@ -16,7 +16,7 @@
     "@types/react": "^16.9.0",
     "@types/react-dom": "^16.9.0",
     "diff": "^4.0.2",
-    "dompurify": "^2.0.10",
+    "dompurify": "^2.0.17",
     "html-janitor": "^2.0.4",
     "markdown-it": "^10.0.0",
     "marked": "^1.0.0",
