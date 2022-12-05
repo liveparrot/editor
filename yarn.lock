@@ -1043,9 +1043,10 @@
   resolved "https://registry.yarnpkg.com/@editorjs/code/-/code-2.4.1.tgz#a1851c781c9ead9a84bd921f04df172a2383f550"
   integrity sha512-R4UUApkm6FLuxrQoqISg6GL73t0WWOdoPdAmAa36xarmtmBRkxu4AfxIwzW2CtUD1CqG1T7Be6jnv4ZeUoMNYQ==
 
-"@editorjs/editorjs@http://github.com/barryloh/editor.js.git#a1c4efad355738dfd24aaf7a98eefa9faf019c78":
+"@editorjs/editorjs@https://github.com/barryloh/editor.js.git#a1c4efad355738dfd24aaf7a98eefa9faf019c78":
   version "2.18.0"
-  resolved "http://github.com/barryloh/editor.js.git#a1c4efad355738dfd24aaf7a98eefa9faf019c78"
+  uid a1c4efad355738dfd24aaf7a98eefa9faf019c78
+  resolved "https://github.com/barryloh/editor.js.git#a1c4efad355738dfd24aaf7a98eefa9faf019c78"
   dependencies:
     codex-notifier "^1.1.2"
     codex-tooltip "^1.0.1"
@@ -3641,9 +3642,9 @@ decamelize@^1.1.2, decamelize@^1.2.0:
   integrity sha1-9lNNFRSCabIDUue+4m9QH5oZEpA=
 
 decode-uri-component@^0.2.0:
-  version "0.2.0"
-  resolved "https://registry.yarnpkg.com/decode-uri-component/-/decode-uri-component-0.2.0.tgz#eb3913333458775cb84cd1a1fae062106bb87545"
-  integrity sha1-6zkTMzRYd1y4TNGh+uBiEGu4dUU=
+  version "0.2.2"
+  resolved "https://registry.yarnpkg.com/decode-uri-component/-/decode-uri-component-0.2.2.tgz#e69dbe25d37941171dd540e024c444cd5188e1e9"
+  integrity sha512-FqUYQ+8o158GyGTrMFJms9qh3CqTKvAqgqsTnkLI8sKu0028orqBhxNMFkFen0zGyg6epACD32pjVk58ngIErQ==
 
 deep-equal@^1.0.1:
   version "1.1.1"
